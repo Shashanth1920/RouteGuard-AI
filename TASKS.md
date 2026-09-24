@@ -1,4 +1,4 @@
-- [ ] Part 1: Setup + Jev hello-world
+- [x] Part 1: Setup + Jev hello-world
 - [ ] Part 2: Decision Engine + Router
 - [ ] Part 3: FastAPI + LLMs
 - [ ] Part 4: LangGraph agent + tools
