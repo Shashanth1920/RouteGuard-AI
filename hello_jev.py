@@ -1,11 +1,11 @@
 """
-Jev hello-world: intent classification via OpenRouter.
+Jev hello-world: intent classification via OpenRouter's Decisions API.
 
 Loads OPENROUTER_API_KEY from .env (never hard-coded), sends 20 test
-sentences to an LLM on OpenRouter, and asks it to decide the intent of
-each message from a fixed set of 5 categories. Prints the chosen intent,
-confidence, and response time for each, and saves one full raw API
-response to experiments/sample_raw_response.json for inspection.
+sentences to Jev (TypeSafe AI's decision model) on OpenRouter, and asks
+it to decide the intent of each message from a fixed set of 5 categories.
+Prints the chosen intent, confidence, and response time for each, and
+saves one full raw API response to experiments/sample_raw_response.json.
 """
 import json
 import os
@@ -20,19 +20,17 @@ API_KEY = os.getenv("OPENROUTER_API_KEY")
 if not API_KEY:
     raise SystemExit("OPENROUTER_API_KEY not found in .env")
 
-API_URL = "https://openrouter.ai/api/v1/chat/completions"
-MODEL = os.getenv("JEV_MODEL", "openai/gpt-4o-mini")
+API_URL = "https://openrouter.ai/api/alpha/decisions"
+MODEL = os.getenv("JEV_MODEL", "typesafe/jev-1.13")
 SESSION = requests.Session()
 
-INTENTS = ["calculation", "coding", "search", "database action", "general"]
-
-SYSTEM_PROMPT = (
-    "You are Jev, an intent-classification router. Given one user message, "
-    "decide the single best-fitting intent from this exact list: "
-    f"{', '.join(INTENTS)}. "
-    'Respond with ONLY a JSON object of the form {"intent": "<one of the '
-    'list>", "confidence": <0.0-1.0>}. No other text, no markdown fences.'
-)
+INTENT_CRITERIA = {
+    "calculation": "The user wants a math computation or numeric result.",
+    "coding": "The user wants code written, debugged, reviewed, or explained.",
+    "search": "The user wants current facts, news, or information looked up.",
+    "database action": "The user wants data inserted, updated, or deleted in a database.",
+    "general": "General conversation, summaries, or anything that doesn't fit the others.",
+}
 
 TEST_SENTENCES = [
     # calculation
@@ -65,15 +63,18 @@ TEST_SENTENCES = [
 
 
 def classify(sentence: str) -> tuple[dict, float, dict]:
-    """Send one sentence to Jev's decision endpoint and return
-    (parsed_result, elapsed_seconds, raw_response_json)."""
+    """Ask Jev's decisions endpoint for the intent of one sentence.
+    Returns (answer_dict, elapsed_seconds, raw_response_json)."""
     payload = {
         "model": MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": sentence},
-        ],
-        "temperature": 0,
+        "state": {"message": sentence},
+        "questions": {
+            "intent": {
+                "type": "choice",
+                "instructions": "What is the intent of this message?",
+                "criteria": INTENT_CRITERIA,
+            }
+        },
     }
     headers = {
         "Authorization": f"Bearer {API_KEY}",
@@ -86,13 +87,7 @@ def classify(sentence: str) -> tuple[dict, float, dict]:
     response.raise_for_status()
     raw = response.json()
 
-    content = raw["choices"][0]["message"]["content"].strip()
-    try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
-        parsed = {"intent": "PARSE_ERROR", "confidence": 0.0, "raw_content": content}
-
-    return parsed, elapsed, raw
+    return raw["answers"]["intent"], elapsed, raw
 
 
 def main():
@@ -101,9 +96,9 @@ def main():
     print(f"Model: {MODEL}\n")
 
     for i, sentence in enumerate(TEST_SENTENCES, 1):
-        result, elapsed, raw = classify(sentence)
-        intent = result.get("intent", "UNKNOWN")
-        confidence = result.get("confidence", "?")
+        answer, elapsed, raw = classify(sentence)
+        intent = answer.get("choice", "UNKNOWN")
+        confidence = answer.get("confidence", "?")
         print(f'{i:2}. "{sentence}"')
         print(f"    intent={intent}  confidence={confidence}  time={elapsed:.2f}s")
 
