@@ -43,7 +43,14 @@ QUESTIONS = {
     "complexity": {
         "type": "score",
         "instructions": "How complex is it to fulfill this request?",
-        "criteria": ["simple", "moderate", "complex"],  # ordered low to high
+        "criteria": [
+            "Simple: a single fact, a quick reply, or one obvious step with no "
+            "real reasoning or domain knowledge required.",
+            "Moderate: a few steps, some domain knowledge, or careful wording "
+            "needed to get right.",
+            "Complex: multi-step reasoning, deep domain knowledge, or high "
+            "precision needed - getting it wrong is easy.",
+        ],  # ordered low to high
     },
     "risk": {
         "type": "noul",
