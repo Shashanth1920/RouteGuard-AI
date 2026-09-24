@@ -1,10 +1,10 @@
 {
-  "id": "gen-1790235976-B3B9YAhshuaqaJyYJQVO",
+  "id": "gen-1790236628-pVMzjWDdNzaiVoyphbF5",
   "object": "chat.completion",
-  "created": 1790235976,
+  "created": 1790236628,
   "model": "openai/gpt-4o-mini",
-  "provider": "OpenAI",
-  "system_fingerprint": "fp_09bf8c818f",
+  "provider": "Azure",
+  "system_fingerprint": "fp_369e662417",
   "service_tier": "default",
   "choices": [
     {
@@ -14,7 +14,7 @@
       "native_finish_reason": "stop",
       "message": {
         "role": "assistant",
-        "content": "{\"intent\": \"calculation\", \"confidence\": 0.95}",
+        "content": "{\"intent\":\"calculation\",\"confidence\":0.95}",
         "refusal": null,
         "reasoning": null
       }
@@ -22,9 +22,9 @@
   ],
   "usage": {
     "prompt_tokens": 96,
-    "completion_tokens": 15,
-    "total_tokens": 111,
-    "cost": 2.34e-05,
+    "completion_tokens": 12,
+    "total_tokens": 108,
+    "cost": 2.16e-05,
     "is_byok": false,
     "prompt_tokens_details": {
       "cached_tokens": 0,
@@ -33,9 +33,9 @@
       "video_tokens": 0
     },
     "cost_details": {
-      "upstream_inference_cost": 2.34e-05,
+      "upstream_inference_cost": 2.16e-05,
       "upstream_inference_prompt_cost": 1.44e-05,
-      "upstream_inference_completions_cost": 9e-06
+      "upstream_inference_completions_cost": 7.2e-06
     },
     "completion_tokens_details": {
       "reasoning_tokens": 0,

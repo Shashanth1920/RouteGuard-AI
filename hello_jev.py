@@ -22,6 +22,7 @@ if not API_KEY:
 
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODEL = os.getenv("JEV_MODEL", "openai/gpt-4o-mini")
+SESSION = requests.Session()
 
 INTENTS = ["calculation", "coding", "search", "database action", "general"]
 
@@ -80,7 +81,7 @@ def classify(sentence: str) -> tuple[dict, float, dict]:
     }
 
     start = time.time()
-    response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+    response = SESSION.post(API_URL, headers=headers, json=payload, timeout=30)
     elapsed = time.time() - start
     response.raise_for_status()
     raw = response.json()
