@@ -1,7 +1,7 @@
 - [x] Part 1: Setup + Jev hello-world
 - [x] Part 2: Decision Engine + Router
 - [x] Part 3: FastAPI + LLMs
-- [ ] Part 4: LangGraph agent + tools (Step 1/2: tools done, agent next)
+- [x] Part 4: LangGraph agent + tools
 - [ ] Part 5: Safety Gate
 - [ ] Part 6: PostgreSQL logging
 - [ ] Part 7: Evaluation

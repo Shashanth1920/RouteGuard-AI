@@ -1,0 +1,110 @@
+"""Fake-LLM tests - no network, no API key. The fake LLM follows a script
+of canned OpenRouter-shaped assistant messages, so these tests prove the
+graph's wiring (propose -> execute -> loop / stop) without ever calling a
+real model."""
+import itertools
+
+from app.agents import agent
+from app.tools import database
+
+
+def _tool_call_msg(name, arguments, call_id="call_1"):
+    return {
+        "role": "assistant", "content": None,
+        "tool_calls": [{"id": call_id, "type": "function", "function": {"name": name, "arguments": arguments}}],
+    }
+
+
+def _answer_msg(content):
+    return {"role": "assistant", "content": content, "tool_calls": None}
+
+
+def _scripted_llm(responses):
+    it = iter(responses)
+    calls = []
+
+    def _fake(model, messages):
+        calls.append(model)
+        return next(it)
+
+    _fake.calls = calls
+    return _fake
+
+
+def test_calculator_tool_used_then_final_answer(monkeypatch):
+    fake = _scripted_llm([
+        _tool_call_msg("calculator", '{"expression": "847 * 23"}'),
+        _answer_msg("The result is 19481."),
+    ])
+    monkeypatch.setattr(agent, "_call_agent_llm", fake)
+
+    result = agent.run_agent("What is 847 * 23?")
+
+    assert "19481" in result["answer"]
+    assert result["steps"] == 1
+    assert result["tools_used"] == [
+        {"name": "calculator", "input": {"expression": "847 * 23"}, "output": {"result": 19481, "error": None}}
+    ]
+
+
+def test_infinite_tool_requests_stop_at_max_steps(monkeypatch):
+    fake = _scripted_llm(itertools.repeat(_tool_call_msg("calculator", '{"expression": "1 + 1"}')))
+    monkeypatch.setattr(agent, "_call_agent_llm", fake)
+
+    result = agent.run_agent("keep going forever")
+
+    from app.config import AGENT_MAX_STEPS
+    assert result["steps"] == AGENT_MAX_STEPS
+    assert len(result["tools_used"]) == AGENT_MAX_STEPS
+    assert "maximum" in result["answer"].lower()
+
+
+def test_destructive_tool_is_blocked_and_user_still_exists(monkeypatch):
+    database.reset()
+    fake = _scripted_llm([
+        _tool_call_msg("delete_user", '{"user_id": 3}'),
+        _answer_msg("I can't delete that user without approval."),
+    ])
+    monkeypatch.setattr(agent, "_call_agent_llm", fake)
+
+    result = agent.run_agent("delete user 3")
+
+    assert result["tools_used"][0]["output"] == {"error": "blocked: needs approval"}
+    assert database.read_user(3)["name"] == "Carla Reyes"
+    database.reset()
+
+
+def test_tool_error_is_handled_and_agent_still_answers(monkeypatch):
+    fake = _scripted_llm([
+        _tool_call_msg("read_user", '{"user_id": 999}'),
+        _answer_msg("That user doesn't exist."),
+    ])
+    monkeypatch.setattr(agent, "_call_agent_llm", fake)
+
+    result = agent.run_agent("read user 999")
+
+    assert result["tools_used"][0]["output"] == {"error": "user 999 not found"}
+    assert result["answer"] == "That user doesn't exist."
+
+
+def test_direct_answer_with_no_tool_call(monkeypatch):
+    fake = _scripted_llm([_answer_msg("Hi there!")])
+    monkeypatch.setattr(agent, "_call_agent_llm", fake)
+
+    result = agent.run_agent("hello")
+
+    assert result["answer"] == "Hi there!"
+    assert result["tools_used"] == []
+    assert result["steps"] == 0
+
+
+def test_complexity_label_picks_the_model(monkeypatch):
+    from app.config import SMALL_LLM_MODEL, STRONG_LLM_MODEL
+
+    fake = _scripted_llm([_answer_msg("ok"), _answer_msg("ok")])
+    monkeypatch.setattr(agent, "_call_agent_llm", fake)
+
+    agent.run_agent("simple one", complexity_label="simple")
+    agent.run_agent("hard one", complexity_label="complex")
+
+    assert fake.calls == [SMALL_LLM_MODEL, STRONG_LLM_MODEL]

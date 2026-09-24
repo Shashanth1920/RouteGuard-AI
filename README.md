@@ -115,17 +115,20 @@ routeguard-ai/
 │   │   └── router.py          Pure-Python rules: Decision -> RouteResult (no AI, no API calls)
 │   ├── llm/
 │   │   └── client.py           call_llm() + get_answer(): route -> model, backup on failure
-│   └── tools/
-│       ├── calculator.py       Safe AST-based math evaluator — no eval()
-│       ├── search.py           Tavily web search — top 3 results, treated as untrusted data
-│       ├── database.py         Fake in-memory 10-user list — list/read/delete + reset()
-│       └── registry.py         Every tool + its name/description/risk/destructive label
+│   ├── tools/
+│   │   ├── calculator.py       Safe AST-based math evaluator — no eval()
+│   │   ├── search.py           Tavily web search — top 3 results, treated as untrusted data
+│   │   ├── database.py         Fake in-memory 10-user list — list/read/delete + reset()
+│   │   └── registry.py         Every tool + its name/description/risk/destructive label + param schema
+│   └── agents/
+│       └── agent.py            Hand-built LangGraph agent: think -> propose_tool -> execute_tool loop
 ├── tests/
 │   ├── test_decisions.py      Fake-Jev tests (no network) + a few real Jev calls
 │   ├── test_routing.py        Hand-made Decisions, no network at all
 │   ├── test_api.py             FastAPI TestClient + fake classify() — no network
 │   ├── test_llm.py             Fake call_llm() — no network, proves human_review = 0 LLM calls
-│   └── test_tools.py           Calculator/search/database/registry — no real API calls
+│   ├── test_tools.py           Calculator/search/database/registry — no real API calls
+│   └── test_agent.py           Scripted fake LLM — no network, proves loop/stop/block behavior
 ├── hello_jev.py                Part 1: first working call to Jev (1 question: intent)
 ├── decision_engine.py           Part 2 script: 4 questions per message in a single call
 ├── run_pipeline.py               Runs 25 sentences through classify() + route(), prints the table
@@ -144,7 +147,7 @@ routeguard-ai/
 ```
 python -m venv venv
 venv\Scripts\activate
-pip install requests python-dotenv pydantic pytest fastapi uvicorn httpx
+pip install requests python-dotenv pydantic pytest fastapi uvicorn httpx langgraph
 ```
 
 Put your key in `.env`:
@@ -158,7 +161,7 @@ OPENROUTER_API_KEY=your_key_here
 venv\Scripts\python.exe hello_jev.py        # Part 1: intent only
 venv\Scripts\python.exe decision_engine.py  # Part 2 script: intent + complexity + risk + needs_tool
 venv\Scripts\python.exe run_pipeline.py     # engine + router together, on all 25 sentences
-venv\Scripts\python.exe -m pytest tests/ -v # 46 tests (fake ones need no API key)
+venv\Scripts\python.exe -m pytest tests/ -v # 52 tests (fake ones need no API key)
 venv\Scripts\python.exe -m uvicorn app.main:app --port 8000  # web service; open http://localhost:8000/docs
 ```
 
@@ -282,9 +285,37 @@ killed. Fixed by capping the exponent; now it's rejected instantly, with
 a regression test.
 → [app/tools/](app/tools/), [tests/test_tools.py](tests/test_tools.py)
 
+**Part 4, Step 2** hires the doctor to use that equipment: a
+[LangGraph](https://langchain-ai.github.io/langgraph/) agent, hand-built
+with `StateGraph` (not the prebuilt `create_react_agent`), because
+"propose a tool" and "execute a tool" have to be 2 separate steps —
+Part 5's Safety Gate goes right between them later, like a nurse
+checking a prescription before the medicine is given. The graph loops
+`think → propose_tool → execute_tool → think` until the model is ready
+to `answer`, capped at 5 steps so a confused agent can't call tools (and
+spend real money) forever. `delete_user` is temporarily hardcoded-blocked
+in `execute_tool` — Part 5 replaces that lock with real Jev-based
+judgment, not the graph shape.
+
+Verified live, real models, real tools: "847 times 23" → calculator →
+19,481; "weather in Tokyo" → real Tavily search → correct answer (one
+result's content looked like unrelated odds-market text — ignored, not
+followed, exactly the prompt-injection defense point); calling the
+agent directly with "delete user 3" → blocked, the fake user is still
+there afterward. One honestly-reported miss: "List all users" landed on
+`strong_llm` instead of `agent` because Jev's intent confidence (0.68)
+fell just under the router's cutoff — rephrasing to name the tool
+explicitly fixed it. Through the full API, "Delete user 3" never even
+reaches the agent — the router's own risk check (Part 2) catches it
+first, `human_review`, zero calls — the destructive-tool lock in the
+agent is a second layer, not the only one.
+→ [results/part4_agent.md](results/part4_agent.md)
+
 ## Progress
 
-See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–3 are done.
-Part 4 Step 1 (calculator/search/database tools + registry) is done —
-46 tests total, no API key needed for most of them. Step 2 (the
-LangGraph agent that actually uses these tools) is next.
+See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–4 are done —
+Jev decides, the router picks a destination, 2 LLMs answer directly, and
+a LangGraph agent can now use real tools (calculator, search, a fake
+database) with a step limit and a destructive-action lock. 52 tests
+total, no API key needed for most of them. Part 5 (the real Safety Gate)
+is next.

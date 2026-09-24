@@ -2,7 +2,7 @@
 - no routing logic and no LLM call/backup logic of its own; those live in
 router.py and app/llm/client.py."""
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -31,6 +31,8 @@ class RouteResponse(BaseModel):
     cost: Optional[float] = None
     llm_time_taken: Optional[float] = None
     error: Optional[str] = None
+    tools_used: Optional[list[dict[str, Any]]] = None
+    steps: Optional[int] = None
 
 
 @router.get("/health")
@@ -42,7 +44,7 @@ def health():
 def route_message(body: RouteRequest):
     decision = classify(body.message)
     result = route(decision)
-    answer = get_answer(result.route, body.message)
+    answer = get_answer(result.route, body.message, decision.complexity_label)
     return RouteResponse(
         request_id=str(uuid.uuid4()),
         decision=decision,

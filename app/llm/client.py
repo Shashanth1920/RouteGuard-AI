@@ -7,6 +7,7 @@ import time
 import requests
 from pydantic import BaseModel
 
+from app.agents.agent import run_agent
 from app.config import (
     LLM_MAX_TOKENS,
     LLM_SYSTEM_PROMPT,
@@ -63,14 +64,23 @@ def call_llm(model: str, message: str) -> LLMAnswer:
 _EMPTY = {
     "answer": None, "model_used": None, "input_tokens": None,
     "output_tokens": None, "cost": None, "llm_time_taken": None, "error": None,
+    "tools_used": None, "steps": None,
 }
 
 
-def get_answer(route: str, message: str) -> dict:
+def get_answer(route: str, message: str, complexity_label: str = "simple") -> dict:
     if route == "human_review":
         return {**_EMPTY, "error": "waiting for human approval"}
     if route == "agent":
-        return {**_EMPTY, "error": "agent not built yet"}
+        result = run_agent(message, complexity_label)
+        return {
+            **_EMPTY,
+            "answer": result["answer"],
+            "model_used": result["model_used"],
+            "tools_used": result["tools_used"],
+            "steps": result["steps"],
+            "llm_time_taken": result["agent_time_taken"],
+        }
 
     model = SMALL_LLM_MODEL if route == "small_llm" else STRONG_LLM_MODEL
     try:
