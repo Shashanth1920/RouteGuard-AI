@@ -5,28 +5,29 @@
       "type": "choice",
       "choice": "calculation",
       "probabilities": {
-        "general": 0,
-        "search": 0,
+        "coding": 0,
         "calculation": 1,
+        "search": 0,
         "database action": 0,
-        "coding": 0
+        "action": 0,
+        "general": 0
       },
       "confidence": 1
     },
     "complexity": {
       "type": "score",
-      "score": 0.39,
+      "score": 0.33,
       "legend": {
         "0": "Simple: a single fact, a quick reply, or one obvious step with no real reasoning or domain knowledge required.",
         "1": "Moderate: a few steps, some domain knowledge, or careful wording needed to get right.",
         "2": "Complex: multi-step reasoning, deep domain knowledge, or high precision needed - getting it wrong is easy."
       },
       "probabilities": {
-        "0": 0.63,
-        "1": 0.36,
+        "0": 0.68,
+        "1": 0.31,
         "2": 0.01
       },
-      "confidence": 0.41
+      "confidence": 0.51
     },
     "risk": {
       "type": "noul",
@@ -34,14 +35,14 @@
     },
     "needs_tool": {
       "type": "noul",
-      "noul": 0.22
+      "noul": 0.53
     }
   },
   "usage": {
-    "input_tokens": 686,
-    "output_tokens": 106,
-    "cost": 2.8812e-05
+    "input_tokens": 768,
+    "output_tokens": 113,
+    "cost": 3.2256e-05
   },
-  "id": "gen-dec-1790237331-btfBfuexBKJVRQxnYIrN",
+  "id": "gen-dec-1790237598-DIAQmc3ajZKxTmS1LyzD",
   "provider": "TypeSafe"
 }

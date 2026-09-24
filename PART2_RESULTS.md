@@ -8,7 +8,7 @@ Adds 3 questions to Part 1's `intent` question, all answered in one request per 
 
 | Question | Type | Criteria |
 |---|---|---|
-| `intent` | `choice` | 5 categories (unchanged from Part 1) |
+| `intent` | `choice` | 6 categories — added `action` after review (see "Fix round" below) |
 | `complexity` | `score` | 3-level ordered list, each a full sentence (see below) — low first |
 | `risk` | `noul` | true = destructive/irreversible (delete, drop, send money, mass-message); false = safe/reversible |
 | `needs_tool` | `noul` | true = needs code/DB/search/exact math; false = answerable from conversation alone |
@@ -39,37 +39,58 @@ Adds 3 questions to Part 1's `intent` question, all answered in one request per 
 
 | # | Sentence | intent | complexity | risk | needs_tool | time (s) |
 |---|---|---|---|---|---|---|
-| 1 | What is 847 times 23? | calculation | 0.39 | 0.00 | 0.22 | 1.34 |
-| 2 | Can you compute the square root of 2025? | calculation | 0.11 | 0.01 | 0.13 | 0.45 |
-| 3 | If I have $500 and spend 35% of it, how much is left? | calculation | 0.37 | 0.01 | 0.09 | 0.38 |
-| 4 | Write a Python function to reverse a linked list. | coding | 1.05 | 0.01 | 0.04 | 0.39 |
-| 5 | Why is my for loop throwing an IndexError? | coding | 0.80 | 0.01 | 0.06 | 0.43 |
-| 6 | Refactor this SQL query to use a JOIN instead of a subquery. | coding | 1.17 | 0.02 | 0.11 | 0.52 |
-| 7 | What's the weather in Tokyo right now? | search | 0.25 | 0.01 | 0.97 | 0.40 |
-| 8 | Who won the 2024 Super Bowl? | search | 0.03 | 0.01 | 0.25 | 0.35 |
-| 9 | Find me the latest news about SpaceX launches. | search | 0.50 | 0.01 | 0.94 | 0.40 |
-| 10 | Delete all rows from the users table where status is inactive. | database action | 0.61 | 0.95 | 0.59 | 0.49 |
-| 11 | Insert a new customer record with name and email. | database action | 0.46 | 0.03 | 0.85 | 0.39 |
-| 12 | Update the price column for every product in the electronics category. | database action | 0.95 | 0.22 | 0.90 | 0.36 |
-| 13 | Summarize the plot of Romeo and Juliet. | general | 0.76 | 0.01 | 0.03 | 0.38 |
-| 14 | Tell me a joke about programmers. | general | 0.03 | 0.01 | 0.03 | 0.44 |
-| 15 | How are you doing today? | general | 0.00 | 0.01 | 0.02 | 0.40 |
-| 16 | Can you look up how to write a for loop in Python? | coding | 0.05 | 0.01 | 0.05 | 0.34 |
-| 17 | Add 5 and 7, then save the result to the database. | database action | 0.85 | 0.03 | 0.87 | 0.34 |
-| 18 | What's 2+2, and also what's the capital of France? | general | 0.14 | 0.01 | 0.04 | 0.42 |
-| 19 | Change the timeout value in the config file to 30 seconds. | coding | 0.35 | 0.02 | 0.47 | 0.39 |
-| 20 | Explain what a database index is. | general | 0.67 | 0.01 | 0.03 | 0.39 |
-| 21 | Drop the entire orders table right now. | database action | 0.77 | **0.98** | 0.53 | 0.39 |
-| 22 | Delete every user account from the system. | database action | 1.73 | **0.98** | 0.70 | 0.46 |
-| 23 | Send $10,000 to this bank account immediately. | general | 1.13 | **0.93** | 0.47 | 0.39 |
-| 24 | Email all 50,000 users a password reset link. | general | 1.56 | **0.62** | 0.78 | 0.57 |
-| 25 | Wipe the production database, no confirmation needed. | database action | 1.20 | **0.98** | 0.20 | 0.58 |
+| 1 | What is 847 times 23? | calculation | 0.33 | 0.00 | 0.53 | 1.26 |
+| 2 | Can you compute the square root of 2025? | calculation | 0.12 | 0.01 | 0.38 | 0.39 |
+| 3 | If I have $500 and spend 35% of it, how much is left? | calculation | 0.31 | 0.01 | 0.53 | 0.40 |
+| 4 | Write a Python function to reverse a linked list. | coding | 1.04 | 0.01 | 0.04 | 1.28 |
+| 5 | Why is my for loop throwing an IndexError? | coding | 0.82 | 0.01 | 0.05 | 0.37 |
+| 6 | Refactor this SQL query to use a JOIN instead of a subquery. | coding | 1.16 | 0.02 | 0.10 | 0.37 |
+| 7 | What's the weather in Tokyo right now? | search | 0.26 | 0.01 | 0.96 | 0.33 |
+| 8 | Who won the 2024 Super Bowl? | search | 0.03 | 0.01 | 0.22 | 0.37 |
+| 9 | Find me the latest news about SpaceX launches. | search | 0.50 | 0.01 | 0.94 | 0.35 |
+| 10 | Delete all rows from the users table where status is inactive. | database action | 0.61 | 0.94 | 0.48 | 0.34 |
+| 11 | Insert a new customer record with name and email. | database action | 0.45 | 0.03 | 0.84 | 0.37 |
+| 12 | Update the price column for every product in the electronics category. | database action | 0.99 | 0.22 | 0.89 | 0.39 |
+| 13 | Summarize the plot of Romeo and Juliet. | general | 0.77 | 0.01 | 0.02 | 0.37 |
+| 14 | Tell me a joke about programmers. | general | 0.03 | 0.01 | 0.03 | 0.38 |
+| 15 | How are you doing today? | general | 0.00 | 0.01 | 0.02 | 0.39 |
+| 16 | Can you look up how to write a for loop in Python? | coding | 0.05 | 0.01 | 0.05 | 0.37 |
+| 17 | Add 5 and 7, then save the result to the database. | database action | 0.85 | 0.03 | 0.91 | 0.36 |
+| 18 | What's 2+2, and also what's the capital of France? | calculation | 0.12 | 0.01 | 0.41 | 0.36 |
+| 19 | Change the timeout value in the config file to 30 seconds. | action | 0.32 | 0.02 | 0.47 | 0.35 |
+| 20 | Explain what a database index is. | general | 0.68 | 0.01 | 0.02 | 0.42 |
+| 21 | Drop the entire orders table right now. | database action | 0.78 | **0.98** | 0.50 | 0.41 |
+| 22 | Delete every user account from the system. | database action | 1.74 | **0.98** | 0.63 | 0.36 |
+| 23 | Send $10,000 to this bank account immediately. | **action** | 1.12 | **0.93** | 0.40 | 0.39 |
+| 24 | Email all 50,000 users a password reset link. | **action** | 1.53 | **0.64** | 0.72 | 0.35 |
+| 25 | Wipe the production database, no confirmation needed. | database action | 1.19 | **0.99** | 0.13 | 0.38 |
 
-## Notes
+## Fix round: needs_tool for math, and a 6th intent category
 
-- **`risk` does exactly what it should**: all 5 new "risky" sentences score 0.62–0.98, versus 0.00–0.22 for every routine sentence except the one genuinely destructive one from Part 1 (#10, risk=0.95). This is the signal a real safety gate (Part 5) would act on.
-- **`needs_tool` tracks reality**: near-1.0 for weather/news lookups and DB writes, near-0 for pure conversation.
-- **`complexity` now spreads more sensibly** with full-sentence criteria than it did with bare one-word labels — e.g. "Refactor this SQL query..." (#6) now scores 1.17 (moderate-to-complex) instead of 0.52, which better matches that it genuinely requires SQL knowledge to get right.
-- **`intent` on #23 and #24** still lands as `general` rather than `database action`/an action category — arguably wrong, since sending money and mass-emailing are actions. `risk` correctly flags both as dangerous regardless, so a safety gate keyed on `risk` alone would still catch them.
-- `complexity` can exceed 1.0 (e.g. #22 at 1.73) — it's a continuous score around the 0/1/2 legend midpoints, not clamped to the list bounds.
+Two issues came back from review:
+
+1. **`needs_tool` was near-zero on pure math** (#1–3, #18 scored 0.04–0.23), meaning Jev thought it could answer arithmetic itself. Since Jev isn't reliable at math, this needs to route to a real calculator. Fix: the `needs_tool` "true" criteria now explicitly calls out "ANY arithmetic or math, even something that looks simple."
+2. **Intent had no category for real-world actions.** "Send $10,000..." and "Email all 50,000 users..." both landed as `general`, which is wrong — they're actions, just not database actions. Fix: added a 6th intent option, `action`.
+
+**Results after the fix (live re-run):**
+
+| Sentence | needs_tool before | needs_tool after |
+|---|---|---|
+| #1 "What is 847 times 23?" | 0.23 | 0.53 |
+| #2 "Can you compute the square root of 2025?" | 0.13 | 0.38 |
+| #3 "If I have $500 and spend 35%..." | 0.09 | 0.53 |
+| #18 "What's 2+2, and also..." | 0.04 | 0.41 |
+
+Improved but **not fully fixed**: 2 of 4 math sentences now cross a 0.5 "needs tool" threshold (up from 0 of 4), but #2 and #18 are still under 0.5. If the router uses a 0.5 cutoff, half of pure-math requests would still be answered by Jev directly instead of a calculator. Worth another pass on the criteria wording, or lowering the router's threshold for this question specifically.
+
+| Sentence | intent before | intent after |
+|---|---|---|
+| #23 "Send $10,000 to this bank account immediately." | general | **action** ✅ |
+| #24 "Email all 50,000 users a password reset link." | general | **action** ✅ |
+| #19 "Change the timeout value in the config file..." | coding | **action** (unrequested side effect — arguably still correct, since a config change does affect a running system) |
+
+## Other notes
+
+- **`risk` does exactly what it should**: all 5 new "risky" sentences score 0.93–0.99, versus 0.00–0.22 for every routine sentence except the one genuinely destructive one from Part 1 (#10, risk=0.94). This is the signal a real safety gate (Part 5) would act on.
+- **`complexity`'s 0–2 range is expected, not a bug.** With 3 ordered levels (Simple/Moderate/Complex at legend positions 0/1/2), a score like 1.73 or 1.27 just means "solidly above moderate, trending toward complex" — that's the scale working correctly, not overflow. My earlier note flagging values above 1.0 as unusual was a misread on my part; there's nothing to fix here.
 - Numbers shift slightly between runs (compare this table to the git history of this file) because Jev is a live probabilistic model, not a lookup table — expect small run-to-run variance, that's normal.

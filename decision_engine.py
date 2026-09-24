@@ -37,6 +37,9 @@ QUESTIONS = {
             "coding": "The user wants code written, debugged, reviewed, or explained.",
             "search": "The user wants current facts, news, or information looked up.",
             "database action": "The user wants data inserted, updated, or deleted in a database.",
+            "action": "The user wants something done that has a real-world effect "
+                      "outside the conversation - moving money, sending a message or "
+                      "email to many people, or triggering an external system.",
             "general": "General conversation, summaries, or anything that doesn't fit the others.",
         },
     },
@@ -68,7 +71,10 @@ QUESTIONS = {
                          "system, rather than just replying in natural language?",
         "criteria": {
             "true": "Requires running code, querying or modifying a database, "
-                    "searching the web, or computing an exact numeric result.",
+                    "searching the web, or computing an exact numeric result - "
+                    "this includes ANY arithmetic or math, even something that "
+                    "looks simple like 847 x 23, since the model itself is "
+                    "unreliable at math and must hand it to a calculator.",
             "false": "Answerable from conversation or general knowledge alone, "
                      "no external system needed.",
         },
