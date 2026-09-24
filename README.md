@@ -5,6 +5,100 @@ math, code, a web search, a database change, a real-world action, or just
 conversation — using [Jev](https://openrouter.ai/typesafe/jev-1.13), a
 decision model from TypeSafe AI (not a text-generating LLM like GPT).
 
+## Architecture
+
+The pipeline has two stages, deliberately kept separate: an AI stage that
+only reports facts, and a plain-code stage that makes the actual decision.
+
+```
+                      User message
+                            │
+                            ▼
+      ┌───────────────────────────────────────────┐
+      │              DECISION ENGINE              │
+      │      app/decision/jev_classifier.py       │
+      │                                           │
+      │ 1 Jev API call, 4 questions asked         │
+      │ at once: intent, complexity, risk,        │
+      │ needs_tool                                │
+      │                                           │
+      │ Jev unreachable or errors?                │
+      │ -> returns a fail-safe form                │
+      │                                           │
+      │ (reports facts only - never decides       │
+      │  where a request goes)                    │
+      └───────────────────────────────────────────┘
+                            │  fills out
+                            ▼
+      ┌───────────────────────────────────────────┐
+      │           DECISION  (the form)            │
+      │    app/decision/schemas.py - Pydantic     │
+      │                                           │
+      │ intent            + confidence            │
+      │ complexity_score  + complexity_label      │
+      │ risk              (0.0 - 1.0)             │
+      │ needs_tool        (0.0 - 1.0)             │
+      │ is_fallback       (True if Jev failed)    │
+      └───────────────────────────────────────────┘
+                            │  read by
+                            ▼
+      ┌───────────────────────────────────────────┐
+      │                  ROUTER                   │
+      │           app/routing/router.py           │
+      │                                           │
+      │ 6 plain Python rules, first match         │
+      │ wins, checked top to bottom               │
+      │                                           │
+      │ 0 API calls, 0 AI - pure,                 │
+      │ deterministic code                        │
+      └───────────────────────────────────────────┘
+                            │  produces
+                            ▼
+      ┌───────────────────────────────────────────┐
+      │                ROUTERESULT                │
+      │                                           │
+      │ route   (1 of the 4 destinations)         │
+      │ reason  (e.g. "risk 0.95 >= 0.5")         │
+      │ rule    (which of the 6 fired)            │
+      └───────────────────────────────────────────┘
+                            │  then routes to:
+          ▼                     ▼                     ▼                     ▼
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│   human_review   │  │    strong_llm    │  │      agent       │  │    small_llm     │
+│    (a person)    │  │   (smart LLM)    │  │ (tool/DB/search) │  │   (cheap LLM)    │
+└──────────────────┘  └──────────────────┘  └──────────────────┘  └──────────────────┘
+```
+
+**The 6 router rules** — checked in order, first match wins, safety before cost:
+
+```
+ Decision
+    │
+    ▼
+ 1. is_fallback?                 ──yes──▶ human_review   "Jev failed — can't assess, treat as emergency"
+    │ no
+    ▼
+ 2. risk ≥ RISK_CUTOFF (0.5)?    ──yes──▶ human_review   "too risky to hand to any model"
+    │ no
+    ▼
+ 3. intent_confidence < 0.7?     ──yes──▶ strong_llm     "Jev itself is unsure — use the smarter model"
+    │ no
+    ▼
+ 4. complexity == "complex"?     ──yes──▶ strong_llm     "hard request — needs real reasoning"
+    │ no
+    ▼
+ 5. needs_tool ≥ 0.4?            ──yes──▶ agent          "needs a calculator / database / search"
+    │ no
+    ▼
+ 6. otherwise                    ────────▶ small_llm     "simple, safe, confident, no tool — cheap is fine"
+```
+
+Why this order matters: "delete all users" is *simple* to execute and
+would look cheap to a rule that checked complexity first — but it's also
+destructive. Risk is checked at rule 2, before anything about cost, so a
+dangerous-but-easy request can never slip through to the cheap model
+just because it looked simple.
+
 ## Folder layout
 
 ```
