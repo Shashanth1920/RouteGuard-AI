@@ -20,6 +20,10 @@ LLM_SYSTEM_PROMPT = "Answer clearly and briefly."
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "400"))
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "20"))
 
+# Part 4 Step 1 - tools
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+SEARCH_TIMEOUT = float(os.getenv("SEARCH_TIMEOUT", "10"))
+
 # Router cutoffs. Chosen from real Decision data on our 25 test sentences
 # (see results/part2_router.md), not guessed.
 

@@ -113,13 +113,19 @@ routeguard-ai/
 │   │   └── jev_classifier.py  Calls Jev, fills the form, fail-safe on error
 │   ├── routing/
 │   │   └── router.py          Pure-Python rules: Decision -> RouteResult (no AI, no API calls)
-│   └── llm/
-│       └── client.py           call_llm() + get_answer(): route -> model, backup on failure
+│   ├── llm/
+│   │   └── client.py           call_llm() + get_answer(): route -> model, backup on failure
+│   └── tools/
+│       ├── calculator.py       Safe AST-based math evaluator — no eval()
+│       ├── search.py           Tavily web search — top 3 results, treated as untrusted data
+│       ├── database.py         Fake in-memory 10-user list — list/read/delete + reset()
+│       └── registry.py         Every tool + its name/description/risk/destructive label
 ├── tests/
 │   ├── test_decisions.py      Fake-Jev tests (no network) + a few real Jev calls
 │   ├── test_routing.py        Hand-made Decisions, no network at all
 │   ├── test_api.py             FastAPI TestClient + fake classify() — no network
-│   └── test_llm.py             Fake call_llm() — no network, proves human_review = 0 LLM calls
+│   ├── test_llm.py             Fake call_llm() — no network, proves human_review = 0 LLM calls
+│   └── test_tools.py           Calculator/search/database/registry — no real API calls
 ├── hello_jev.py                Part 1: first working call to Jev (1 question: intent)
 ├── decision_engine.py           Part 2 script: 4 questions per message in a single call
 ├── run_pipeline.py               Runs 25 sentences through classify() + route(), prints the table
@@ -152,7 +158,7 @@ OPENROUTER_API_KEY=your_key_here
 venv\Scripts\python.exe hello_jev.py        # Part 1: intent only
 venv\Scripts\python.exe decision_engine.py  # Part 2 script: intent + complexity + risk + needs_tool
 venv\Scripts\python.exe run_pipeline.py     # engine + router together, on all 25 sentences
-venv\Scripts\python.exe -m pytest tests/ -v # 35 tests (fake ones need no API key)
+venv\Scripts\python.exe -m pytest tests/ -v # 46 tests (fake ones need no API key)
 venv\Scripts\python.exe -m uvicorn app.main:app --port 8000  # web service; open http://localhost:8000/docs
 ```
 
@@ -253,10 +259,32 @@ miss (the "explain the financial report risks" example routed to
 `small_llm`, not `strong_llm`, because Jev scored it "moderate" not
 "complex"): [results/part3_llm.md](results/part3_llm.md)
 
+**Part 4, Step 1** builds the `agent` route's equipment, before the agent
+itself exists: `calculator` (low risk, safe AST parser — no `eval()`,
+confirmed by grep and by trying to break it: `__import__('os')`,
+`os.system(1)`, `1==1` all rejected; division by zero is a clean error,
+not a crash), `search` (medium risk, real [Tavily](https://tavily.com/)
+calls, results treated as plain untrusted data, never as instructions —
+that's what stops prompt injection hidden in a webpage from doing
+anything), and `database` (high risk, a fake in-memory list of 10 users
+so `delete_user` can be tested for real without ever touching real
+data). Every tool is registered in `app/tools/registry.py` with a name,
+description, and risk label (`delete_user` marked `destructive`) —
+labels Part 5's Safety Gate will read the same way a hospital locks
+drawers based on what's inside them, without needing to know how the
+drawer works.
+
+Stress-testing the calculator by hand caught something the "reject
+`eval()`" tests didn't: `2 ** 999999999999` is *valid* arithmetic, not
+a code-injection attempt, but Python's bigint `pow()` spent unbounded
+memory computing it — it grew a process to several GB before being
+killed. Fixed by capping the exponent; now it's rejected instantly, with
+a regression test.
+→ [app/tools/](app/tools/), [tests/test_tools.py](tests/test_tools.py)
+
 ## Progress
 
-See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–3 are done —
-Jev decides, the router picks a destination, and 2 real LLMs (plus a
-safe no-op for `agent`/`human_review`) actually answer. 35 tests total,
-no API key needed for most of them. Part 4 (LangGraph agent + tools) is
-next.
+See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–3 are done.
+Part 4 Step 1 (calculator/search/database tools + registry) is done —
+46 tests total, no API key needed for most of them. Step 2 (the
+LangGraph agent that actually uses these tools) is next.
