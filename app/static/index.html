@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>routeguard-ai</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    max-width: 820px; margin: 40px auto; padding: 0 20px;
+    background: #0f1115; color: #e6e6e6;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  .sub { color: #9aa0a6; margin-bottom: 24px; font-size: 0.9rem; }
+  form { display: flex; gap: 8px; margin-bottom: 24px; }
+  input[type=text] {
+    flex: 1; padding: 12px 14px; font-size: 1rem; border-radius: 8px;
+    border: 1px solid #3a3f4b; background: #1a1d24; color: #e6e6e6;
+  }
+  button {
+    padding: 12px 20px; font-size: 1rem; border-radius: 8px; border: none;
+    background: #4f7cff; color: white; cursor: pointer; font-weight: 600;
+  }
+  button:disabled { background: #333844; cursor: wait; }
+  .examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  .examples button {
+    background: #1a1d24; border: 1px solid #3a3f4b; color: #b8bcc4;
+    font-weight: 400; font-size: 0.85rem; padding: 6px 12px;
+  }
+  #result { display: none; }
+  .card {
+    background: #1a1d24; border: 1px solid #2a2e38; border-radius: 10px;
+    padding: 18px 20px; margin-bottom: 16px;
+  }
+  .card h3 { margin: 0 0 10px 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #9aa0a6; }
+  .route-badge {
+    display: inline-block; padding: 6px 14px; border-radius: 999px;
+    font-weight: 700; font-size: 1rem; margin-bottom: 6px;
+  }
+  .route-human_review { background: #ff4d4f33; color: #ff7875; border: 1px solid #ff4d4f; }
+  .route-strong_llm   { background: #ffa94033; color: #ffc078; border: 1px solid #ffa940; }
+  .route-agent        { background: #4f7cff33; color: #85a5ff; border: 1px solid #4f7cff; }
+  .route-small_llm    { background: #40c05733; color: #8ce99a; border: 1px solid #40c057; }
+  .reason { color: #b8bcc4; font-size: 0.9rem; }
+  .model-used {
+    display: inline-block; margin-left: 8px; padding: 5px 10px; border-radius: 999px;
+    background: #2a2e38; color: #d0d4dc; font-size: 0.8rem; font-family: ui-monospace, monospace;
+  }
+  .tools-summary { margin-top: 10px; font-size: 0.95rem; }
+  .tools-summary .pill {
+    display: inline-block; margin: 2px 6px 2px 0; padding: 5px 12px; border-radius: 999px;
+    background: #14161b; border: 1px solid #3a3f4b; font-weight: 600;
+  }
+  .answer { font-size: 1.05rem; line-height: 1.5; white-space: pre-wrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  td { padding: 4px 0; border-bottom: 1px solid #2a2e38; }
+  td.k { color: #9aa0a6; width: 40%; }
+  td.v { color: #e6e6e6; text-align: right; font-family: ui-monospace, monospace; }
+  .tool-call {
+    background: #14161b; border: 1px solid #2a2e38; border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 8px; font-size: 0.85rem;
+  }
+  .tool-name { color: #85a5ff; font-weight: 700; font-family: ui-monospace, monospace; }
+  .tool-io { color: #b8bcc4; font-family: ui-monospace, monospace; white-space: pre-wrap; margin-top: 4px; word-break: break-all; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: #9aa0a6; font-size: 0.85rem; }
+  pre { background: #0d0e12; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.8rem; }
+  .error { color: #ff7875; }
+  .spinner { display: none; color: #9aa0a6; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+
+<h1>routeguard-ai</h1>
+<div class="sub">Ask something. Jev decides where it goes; the router sends it there; see exactly what ran.</div>
+
+<form id="form">
+  <input type="text" id="message" placeholder="e.g. What is 847 times 23?" autocomplete="off" />
+  <button type="submit" id="send">Send</button>
+</form>
+
+<div class="examples">
+  <button type="button" data-msg="What is 847 times 23?">calculator</button>
+  <button type="button" data-msg="What's the weather in Tokyo right now?">search</button>
+  <button type="button" data-msg="List all users in the database using the tool.">list_users</button>
+  <button type="button" data-msg="Delete user 3">human_review (blocked)</button>
+  <button type="button" data-msg="Tell me a joke">small_llm</button>
+  <button type="button" data-msg="Explain the risks in a 200-page financial report">strong_llm</button>
+</div>
+
+<div class="spinner" id="spinner">Working — Jev is deciding, then the route runs...</div>
+
+<div id="result">
+  <div class="card">
+    <h3>Route</h3>
+    <span class="route-badge" id="routeBadge"></span>
+    <span class="model-used" id="modelUsedInline"></span>
+    <div class="reason" id="reason"></div>
+    <div class="tools-summary" id="toolsSummary"></div>
+  </div>
+
+  <div class="card">
+    <h3>Answer</h3>
+    <div class="answer" id="answer"></div>
+  </div>
+
+  <div class="card" id="toolsCard" style="display:none">
+    <h3>Tools called <span id="stepsLabel"></span></h3>
+    <div id="toolsList"></div>
+  </div>
+
+  <div class="card">
+    <h3>Jev's decision (why it was routed this way)</h3>
+    <table id="decisionTable"></table>
+  </div>
+
+  <div class="card">
+    <h3>Execution details</h3>
+    <table id="execTable"></table>
+  </div>
+
+  <details>
+    <summary>Raw JSON response</summary>
+    <pre id="rawJson"></pre>
+  </details>
+</div>
+
+<script>
+const form = document.getElementById('form');
+const messageInput = document.getElementById('message');
+const sendBtn = document.getElementById('send');
+const spinner = document.getElementById('spinner');
+const result = document.getElementById('result');
+
+document.querySelectorAll('.examples button').forEach(b => {
+  b.addEventListener('click', () => {
+    messageInput.value = b.dataset.msg;
+    form.requestSubmit();
+  });
+});
+
+const TOOL_LABELS = {
+  calculator: { icon: '🧮', label: 'Calculator tool used' },
+  search: { icon: '🔍', label: 'Search tool used' },
+  list_users: { icon: '🗄️', label: 'Database tool used (list users)' },
+  read_user: { icon: '🗄️', label: 'Database tool used (read user)' },
+  delete_user: { icon: '🗄️', label: 'Database tool used (delete user)' },
+};
+
+function toolLabel(name) {
+  return TOOL_LABELS[name] || { icon: '🔧', label: `${name} tool used` };
+}
+
+function row(k, v) {
+  return `<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`;
+}
+
+function fmt(v) {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'number') return Number.isInteger(v) ? v : v.toFixed(4);
+  return v;
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const message = messageInput.value.trim();
+  if (!message) return;
+
+  sendBtn.disabled = true;
+  spinner.style.display = 'block';
+  result.style.display = 'none';
+
+  try {
+    const resp = await fetch('/v1/route', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      document.getElementById('answer').innerHTML = `<span class="error">HTTP ${resp.status}: ${JSON.stringify(data)}</span>`;
+      document.getElementById('routeBadge').textContent = 'error';
+      document.getElementById('reason').textContent = '';
+      document.getElementById('decisionTable').innerHTML = '';
+      document.getElementById('execTable').innerHTML = '';
+      document.getElementById('toolsCard').style.display = 'none';
+      document.getElementById('rawJson').textContent = JSON.stringify(data, null, 2);
+      result.style.display = 'block';
+      return;
+    }
+
+    const badge = document.getElementById('routeBadge');
+    badge.textContent = data.route;
+    badge.className = 'route-badge route-' + data.route;
+    document.getElementById('reason').textContent = data.reason;
+
+    const modelInline = document.getElementById('modelUsedInline');
+    modelInline.textContent = data.model_used ? `via ${data.model_used}` : '';
+
+    const answerEl = document.getElementById('answer');
+    if (data.error) {
+      answerEl.innerHTML = `<span class="error">${data.error}</span>`;
+    } else {
+      answerEl.textContent = data.answer || '(no answer field for this route)';
+    }
+
+    const toolsCard = document.getElementById('toolsCard');
+    const toolsList = document.getElementById('toolsList');
+    const toolsSummary = document.getElementById('toolsSummary');
+    if (data.tools_used && data.tools_used.length) {
+      toolsCard.style.display = 'block';
+      document.getElementById('stepsLabel').textContent =
+        `(${data.steps} step${data.steps === 1 ? '' : 's'}, thinking done by ${data.model_used})`;
+      toolsList.innerHTML = data.tools_used.map(t => {
+        const tl = toolLabel(t.name);
+        return `
+        <div class="tool-call">
+          <span class="tool-name">${tl.icon} ${tl.label} <span style="color:#6b7280">(${t.name})</span></span>
+          <div class="tool-io">input:  ${JSON.stringify(t.input)}</div>
+          <div class="tool-io">output: ${JSON.stringify(t.output)}</div>
+        </div>
+      `;
+      }).join('');
+      const uniqueTools = [...new Set(data.tools_used.map(t => t.name))];
+      toolsSummary.innerHTML = uniqueTools.map(name => {
+        const tl = toolLabel(name);
+        return `<span class="pill">${tl.icon} ${tl.label}</span>`;
+      }).join('');
+    } else {
+      toolsCard.style.display = 'none';
+      toolsList.innerHTML = '';
+      toolsSummary.innerHTML = data.route === 'agent'
+        ? '<span class="pill">No tool used — answered directly</span>' : '';
+    }
+
+    const d = data.decision;
+    document.getElementById('decisionTable').innerHTML =
+      row('intent', `${d.intent} (${fmt(d.intent_confidence)})`) +
+      row('complexity', `${d.complexity_label} (${fmt(d.complexity_score)})`) +
+      row('risk', fmt(d.risk)) +
+      row('needs_tool', fmt(d.needs_tool)) +
+      row('jev time', fmt(d.time_taken) + 's') +
+      row('is_fallback', d.is_fallback);
+
+    document.getElementById('execTable').innerHTML =
+      row('model used', data.model_used || '—') +
+      row('llm/agent time', data.llm_time_taken != null ? fmt(data.llm_time_taken) + 's' : '—') +
+      row('input / output tokens', data.input_tokens != null ? `${data.input_tokens} / ${data.output_tokens}` : '—') +
+      row('cost', data.cost != null ? '$' + data.cost : '—') +
+      row('request id', data.request_id);
+
+    document.getElementById('rawJson').textContent = JSON.stringify(data, null, 2);
+    result.style.display = 'block';
+  } catch (err) {
+    document.getElementById('answer').innerHTML = `<span class="error">Request failed: ${err}</span>`;
+    result.style.display = 'block';
+  } finally {
+    sendBtn.disabled = false;
+    spinner.style.display = 'none';
+  }
+});
+</script>
+</body>
+</html>

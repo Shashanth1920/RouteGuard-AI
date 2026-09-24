@@ -87,6 +87,33 @@ def test_tool_error_is_handled_and_agent_still_answers(monkeypatch):
     assert result["answer"] == "That user doesn't exist."
 
 
+def test_think_trims_multiple_tool_calls_to_one(monkeypatch):
+    # A model can return >1 tool_calls in one message even with
+    # parallel_tool_calls=False requested (some providers ignore it). If
+    # the stored history still declared the extra ones with no matching
+    # tool response, the next real call would 400 - confirmed live
+    # against the real OpenRouter API.
+    multi_call_msg = {
+        "role": "assistant", "content": None,
+        "tool_calls": [
+            {"id": "call_1", "type": "function", "function": {"name": "search", "arguments": '{"query": "a"}'}},
+            {"id": "call_2", "type": "function", "function": {"name": "search", "arguments": '{"query": "b"}'}},
+        ],
+    }
+    monkeypatch.setattr(agent, "_call_agent_llm", lambda model, messages: multi_call_msg)
+
+    state = {
+        "messages": [{"role": "user", "content": "search something"}],
+        "model": "any", "proposed_tool": None, "tools_used": [], "step_count": 0, "final_answer": None,
+    }
+    update = agent.think(state)
+
+    assert update["proposed_tool"] == {"id": "call_1", "name": "search", "arguments": {"query": "a"}}
+    stored_msg = update["messages"][-1]
+    assert len(stored_msg["tool_calls"]) == 1
+    assert stored_msg["tool_calls"][0]["id"] == "call_1"
+
+
 def test_direct_answer_with_no_tool_call(monkeypatch):
     fake = _scripted_llm([_answer_msg("Hi there!")])
     monkeypatch.setattr(agent, "_call_agent_llm", fake)
@@ -101,10 +128,15 @@ def test_direct_answer_with_no_tool_call(monkeypatch):
 def test_complexity_label_picks_the_model(monkeypatch):
     from app.config import SMALL_LLM_MODEL, STRONG_LLM_MODEL
 
-    fake = _scripted_llm([_answer_msg("ok"), _answer_msg("ok")])
+    fake = _scripted_llm([_answer_msg("ok"), _answer_msg("ok"), _answer_msg("ok")])
     monkeypatch.setattr(agent, "_call_agent_llm", fake)
 
     agent.run_agent("simple one", complexity_label="simple")
+    agent.run_agent("in-between one", complexity_label="moderate")
     agent.run_agent("hard one", complexity_label="complex")
 
-    assert fake.calls == [SMALL_LLM_MODEL, STRONG_LLM_MODEL]
+    # Only "complex" should reach for the expensive model - same boundary
+    # the router itself uses. Caught live: "847 * 23" and "latest SpaceX
+    # news" both scored "moderate" and were wrongly sent to Terra before
+    # this test existed, because "moderate" wasn't exercised here.
+    assert fake.calls == [SMALL_LLM_MODEL, SMALL_LLM_MODEL, STRONG_LLM_MODEL]

@@ -60,6 +60,13 @@ def _call_agent_llm(model: str, messages: list) -> dict:
             "messages": messages,
             "tools": TOOL_SCHEMAS,
             "tool_choice": "auto",
+            # The graph only ever proposes/executes 1 tool per step (on
+            # purpose - Part 5's Safety Gate checks one proposal at a time).
+            # Without this, the model sometimes returns several tool_calls
+            # in one turn; execute_tool only answers the first, leaving the
+            # rest dangling - confirmed live, OpenRouter's next call then
+            # 400s with an unhandled HTTPError and no response body.
+            "parallel_tool_calls": False,
         },
         timeout=LLM_TIMEOUT,
     )
@@ -69,13 +76,21 @@ def _call_agent_llm(model: str, messages: list) -> dict:
 
 def think(state: AgentState) -> dict:
     assistant_msg = _call_agent_llm(state["model"], state["messages"])
-    messages = state["messages"] + [assistant_msg]
 
     tool_calls = assistant_msg.get("tool_calls")
     if not tool_calls:
+        messages = state["messages"] + [assistant_msg]
         return {"messages": messages, "final_answer": assistant_msg.get("content") or "", "proposed_tool": None}
 
+    # We only ever execute 1 tool per step. Trim the stored message to
+    # match, even though parallel_tool_calls=False should already prevent
+    # more than one - a provider that ignores that flag must never leave
+    # a tool_call in history with no matching tool response, or the next
+    # call 400s (confirmed live: this is exactly what happened before
+    # parallel_tool_calls was added).
     call = tool_calls[0]
+    assistant_msg = {**assistant_msg, "tool_calls": [call]}
+    messages = state["messages"] + [assistant_msg]
     try:
         arguments = json.loads(call["function"]["arguments"] or "{}")
     except (json.JSONDecodeError, TypeError):
@@ -151,10 +166,14 @@ _GRAPH = _build_graph()
 
 
 def run_agent(message: str, complexity_label: str = "simple") -> dict:
-    # Reuse Jev's complexity score: Luna thinks for simple tasks, Terra for
-    # anything moderate/complex - same "don't pay specialist prices for
-    # junior-doctor work" logic as the router's own model choice.
-    model = SMALL_LLM_MODEL if complexity_label == "simple" else STRONG_LLM_MODEL
+    # Reuse Jev's complexity score, same boundary the router itself uses
+    # (Part 3 rule 4: only "complex" escalates) - "moderate" stays on Luna,
+    # not Terra. A tighter boundary (only "simple" -> Luna) looked right at
+    # first but sent ordinary requests like "847 * 23" and "latest SpaceX
+    # news" (both scored "moderate") to Terra for no real benefit - caught
+    # live, not by a test, since the fake-LLM tests never exercised the
+    # "moderate" label.
+    model = STRONG_LLM_MODEL if complexity_label == "complex" else SMALL_LLM_MODEL
     start = time.time()
     initial_state: AgentState = {
         "messages": [
