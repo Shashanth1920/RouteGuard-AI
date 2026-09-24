@@ -1,8 +1,8 @@
 # Part 2 — Decision Engine: 4 Questions, 1 Call Per Sentence
 
-Script: [`decision_engine.py`](decision_engine.py)
+Script: [`decision_engine.py`](../decision_engine.py)
 Model: `typesafe/jev-1.13` (pinned major.minor — not the floating `~typesafe/jev-latest` alias)
-Full raw sample response: [`experiments/part2_raw_response.json`](experiments/part2_raw_response.json)
+Full raw sample response: [`experiments/part2_raw_response.json`](../experiments/part2_raw_response.json)
 
 Adds 3 questions to Part 1's `intent` question, all answered in one request per sentence:
 
@@ -21,7 +21,7 @@ Adds 3 questions to Part 1's `intent` question, all answered in one request per 
 ## How to verify this is real, not made up
 
 - Every raw response carries a unique server-generated `id` (e.g. `gen-dec-1790237331-btfBfuexBKJVRQxnYIrN`). Two runs of this script produce two different ids — I can't fabricate those, they come from TypeSafe's server.
-- The `legend` field in the raw response echoes back the exact `criteria` text sent in the request. Open [`experiments/part2_raw_response.json`](experiments/part2_raw_response.json) yourself — the wording matches `decision_engine.py`'s `QUESTIONS["complexity"]["criteria"]` verbatim, which only happens if the request actually reached the server and the server answered it.
+- The `legend` field in the raw response echoes back the exact `criteria` text sent in the request. Open [`experiments/part2_raw_response.json`](../experiments/part2_raw_response.json) yourself — the wording matches `decision_engine.py`'s `QUESTIONS["complexity"]["criteria"]` verbatim, which only happens if the request actually reached the server and the server answered it.
 - Every response includes real `usage.cost` in USD. These accumulate on your OpenRouter account's usage dashboard (openrouter.ai/activity) — you can cross-check the call count and spend there independently of anything I report here.
 - You can rerun it yourself any time: `venv\Scripts\python.exe decision_engine.py`. Numbers will differ slightly call to call (the model isn't deterministic), which is itself evidence these are live inferences, not a cached/hardcoded table.
 

@@ -1,8 +1,8 @@
 # Part 1 — Jev Hello-World: Input & Output
 
-Script: [`hello_jev.py`](hello_jev.py)
+Script: [`hello_jev.py`](../hello_jev.py)
 Model: `typesafe/jev-1.13` — **the real Jev decision model** (TypeSafe AI, released Sept 15 2026), called via OpenRouter's `/api/alpha/decisions` endpoint.
-Full raw sample response: [`experiments/sample_raw_response.json`](experiments/sample_raw_response.json)
+Full raw sample response: [`experiments/sample_raw_response.json`](../experiments/sample_raw_response.json)
 
 Earlier versions of this script mistakenly called the generic OpenAI chat completions endpoint. Jev is a different kind of model — a "System One" decision model. It doesn't generate text; you send it a `state` (the message) plus typed `questions` with `criteria` describing each possible answer, and it returns a typed choice with a native confidence score and per-option probabilities — no prompt engineering or JSON parsing needed.
 
