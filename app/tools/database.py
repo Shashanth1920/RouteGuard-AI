@@ -17,10 +17,26 @@ _INITIAL_USERS = [
 
 _users = [dict(u) for u in _INITIAL_USERS]
 
+_INITIAL_PRODUCTS = [
+    {"id": 1, "name": "Wireless Mouse", "category": "electronics", "price": 25.0},
+    {"id": 2, "name": "Bluetooth Speaker", "category": "electronics", "price": 60.0},
+    {"id": 3, "name": "USB-C Cable", "category": "electronics", "price": 12.0},
+    {"id": 4, "name": "Noise-Cancelling Headphones", "category": "electronics", "price": 150.0},
+    {"id": 5, "name": "Webcam", "category": "electronics", "price": 45.0},
+    {"id": 6, "name": "Novel: The Long Way", "category": "books", "price": 18.0},
+    {"id": 7, "name": "Cookbook", "category": "books", "price": 22.0},
+    {"id": 8, "name": "T-Shirt", "category": "clothing", "price": 15.0},
+    {"id": 9, "name": "Running Shoes", "category": "clothing", "price": 80.0},
+    {"id": 10, "name": "Coffee Mug", "category": "home", "price": 9.0},
+]
+
+_products = [dict(p) for p in _INITIAL_PRODUCTS]
+
 
 def reset():
-    global _users
+    global _users, _products
     _users = [dict(u) for u in _INITIAL_USERS]
+    _products = [dict(p) for p in _INITIAL_PRODUCTS]
 
 
 def list_users() -> list:
@@ -41,3 +57,29 @@ def delete_user(user_id: int) -> dict:
     if len(_users) == before:
         return {"error": f"user {user_id} not found"}
     return {"deleted": user_id}
+
+
+def list_products() -> list:
+    return list(_products)
+
+
+def update_product_price(price: float, product_id: int = None, category: str = None) -> dict:
+    """Set price on one product (product_id) or every product in a category.
+    Same shape either way - the Safety Gate (app/safety/gate.py), not this
+    function, is what tells a single-product update apart from a
+    whole-category one."""
+    if product_id is not None:
+        for p in _products:
+            if p["id"] == product_id:
+                p["price"] = price
+                return {"updated": [product_id], "price": price}
+        return {"error": f"product {product_id} not found"}
+    if category is not None:
+        updated = [p["id"] for p in _products if p["category"] == category]
+        for p in _products:
+            if p["category"] == category:
+                p["price"] = price
+        if not updated:
+            return {"error": f"no products in category '{category}'"}
+        return {"updated": updated, "price": price}
+    return {"error": "must specify product_id or category"}

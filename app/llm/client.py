@@ -31,7 +31,7 @@ class LLMAnswer(BaseModel):
 
 
 def call_llm(model: str, message: str) -> LLMAnswer:
-    start = time.time()
+    start = time.monotonic()
     resp = SESSION.post(
         CHAT_URL,
         headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
@@ -55,7 +55,7 @@ def call_llm(model: str, message: str) -> LLMAnswer:
         input_tokens=usage["prompt_tokens"],
         output_tokens=usage["completion_tokens"],
         cost=usage["cost"],
-        llm_time_taken=time.time() - start,
+        llm_time_taken=time.monotonic() - start,
     )
 
 
@@ -81,6 +81,9 @@ def get_answer(route: str, message: str, complexity_label: str = "simple") -> di
             "gate_log": result["gate_log"],
             "steps": result["steps"],
             "llm_time_taken": result["agent_time_taken"],
+            "input_tokens": result["input_tokens"],
+            "output_tokens": result["output_tokens"],
+            "cost": result["cost"],
         }
 
     model = SMALL_LLM_MODEL if route == "small_llm" else STRONG_LLM_MODEL

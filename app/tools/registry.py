@@ -62,4 +62,31 @@ TOOLS = [
             "required": ["user_id"],
         },
     },
+    {
+        "name": "list_products",
+        "description": "List all products in the fake database.",
+        "risk": "low",
+        "destructive": False,
+        "func": database.list_products,
+        "params": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "update_product_price",
+        "description": "Set the price of one product (by id) or every product in a "
+                        "category. Not marked destructive - a single-product update and "
+                        "a whole-category update use this same tool, so the Safety Gate "
+                        "judges each call's actual scope rather than a fixed label.",
+        "risk": "medium",
+        "destructive": False,
+        "func": database.update_product_price,
+        "params": {
+            "type": "object",
+            "properties": {
+                "price": {"type": "number", "description": "the new price"},
+                "product_id": {"type": "integer", "description": "update only this product"},
+                "category": {"type": "string", "description": "update every product in this category"},
+            },
+            "required": ["price"],
+        },
+    },
 ]

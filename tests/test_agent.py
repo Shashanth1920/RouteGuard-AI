@@ -55,7 +55,10 @@ def test_calculator_tool_used_then_final_answer(monkeypatch):
         {"name": "calculator", "input": {"expression": "847 * 23"}, "output": {"result": 19481, "error": None}}
     ]
     assert result["gate_log"] == [
-        {"tool": "calculator", "input": {"expression": "847 * 23"}, "result": "ALLOW", "reason": "ok", "time_taken": 0.01}
+        {
+            "tool": "calculator", "input": {"expression": "847 * 23"}, "result": "ALLOW", "reason": "ok",
+            "time_taken": 0.01, "destructive_score": None, "matches_score": None,
+        }
     ]
 
 

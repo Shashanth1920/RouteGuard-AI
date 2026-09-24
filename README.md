@@ -122,8 +122,10 @@ routeguard-ai/
 │   │   └── registry.py         Every tool + its name/description/risk/destructive label + param schema
 │   ├── agents/
 │   │   └── agent.py            Hand-built LangGraph agent: think -> propose_tool -> execute_tool loop
-│   └── safety/
-│       └── gate.py             The pharmacist: 2 Jev questions per proposed tool call, before it runs
+│   ├── safety/
+│   │   └── gate.py             The pharmacist: 2 Jev questions per proposed tool call, before it runs
+│   └── db/
+│       └── logging.py          The record book: save_request(), get_request(), get_stats() - fail-open
 ├── tests/
 │   ├── test_decisions.py      Fake-Jev tests (no network) + a few real Jev calls
 │   ├── test_routing.py        Hand-made Decisions, no network at all
@@ -131,17 +133,21 @@ routeguard-ai/
 │   ├── test_llm.py             Fake call_llm() — no network, proves human_review = 0 LLM calls
 │   ├── test_tools.py           Calculator/search/database/registry — no real API calls
 │   ├── test_agent.py           Scripted fake LLM + fake gate — no network, proves loop/stop/block behavior
-│   └── test_gate.py            Fake Jev — no network, proves ALLOW/NEEDS_APPROVAL/BLOCK rules
+│   ├── test_gate.py            Fake Jev — no network, proves ALLOW/NEEDS_APPROVAL/BLOCK rules
+│   └── test_db.py              Real Postgres, dedicated routeguard_test DB — skips if unreachable
 ├── hello_jev.py                Part 1: first working call to Jev (1 question: intent)
 ├── decision_engine.py           Part 2 script: 4 questions per message in a single call
 ├── run_pipeline.py               Runs 25 sentences through classify() + route(), prints the table
 ├── results/
 │   ├── part1.md                 Part 1 input/output + write-up
 │   ├── part2.md                 Part 2 input/output + write-up, incl. fix history
-│   └── part2_router.md          Router: 25-sentence table, cutoff reasoning, verification
+│   ├── part2_router.md          Router: 25-sentence table, cutoff reasoning, verification
+│   ├── part4_agent.md           Agent: live tool-use examples, tests
+│   ├── part5_gate.md            Safety Gate: live examples, injection demo, tests
+│   └── part6_logging.md         Logging: fail-open proof, 10-request verification, a real bug caught
 ├── experiments/                 Raw JSON responses saved from real runs (proof of work)
 ├── TASKS.md                     8-part build checklist, checked off as we go
-├── .env                         Your OpenRouter API key (not committed — see .gitignore)
+├── .env                         API keys + DB credentials (not committed — see .gitignore)
 └── venv/                        Python virtual environment (not committed)
 ```
 
@@ -150,8 +156,13 @@ routeguard-ai/
 ```
 python -m venv venv
 venv\Scripts\activate
-pip install requests python-dotenv pydantic pytest fastapi uvicorn httpx langgraph
+pip install requests python-dotenv pydantic pytest fastapi uvicorn httpx langgraph psycopg2-binary
 ```
+
+Part 6 needs a running PostgreSQL (this project uses a native local
+install; Docker works the same way). Create a dedicated role + 2
+databases (main + test), then put its credentials in `.env` as
+`DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_TEST_NAME`/`DB_USER`/`DB_PASSWORD`.
 
 Put your key in `.env`:
 ```
@@ -164,7 +175,7 @@ OPENROUTER_API_KEY=your_key_here
 venv\Scripts\python.exe hello_jev.py        # Part 1: intent only
 venv\Scripts\python.exe decision_engine.py  # Part 2 script: intent + complexity + risk + needs_tool
 venv\Scripts\python.exe run_pipeline.py     # engine + router together, on all 25 sentences
-venv\Scripts\python.exe -m pytest tests/ -v # 63 tests (fake ones need no API key)
+venv\Scripts\python.exe -m pytest tests/ -v # 73 tests (fake ones need no API key or database)
 venv\Scripts\python.exe -m uvicorn app.main:app --port 8000  # web service; open http://localhost:8000/docs
 ```
 
@@ -343,11 +354,44 @@ would produce returned `BLOCK` with a real Jev call (match score 0.01).
 Both layers verified, not just the one that held.
 → [results/part5_gate.md](results/part5_gate.md)
 
+**Part 6** is the hospital's record book: every API request gets saved to
+PostgreSQL after its answer is ready - `requests` (Jev's 4 answers, the
+route/rule/reason, model/tokens/cost, and Jev time/LLM time/total time,
+kept separate) and `tool_calls` (one row per tool call, linked by
+`request_id`, with the gate's result/reason/scores/time and whether it
+actually ran). Docker wasn't installed on this machine, so this runs
+against a native local PostgreSQL 18 install instead - same role a
+`postgres` container would play here.
+
+**Key design point: logging fails open, safety fails closed.** When
+`save_request()` can't reach the database, it prints a warning and moves
+on - it never raises, because a missing log row is a much smaller problem
+than refusing to answer the user over an observability hiccup. Verified
+live by pointing the running app at an unreachable database (the same
+real failure a stopped database produces): `POST /v1/route` still
+returned `200 OK` with a real answer, alongside 2 clear warnings in the
+server log.
+
+Building this caught a real, unstaged bug: one logged record showed a
+**negative** `llm_time` and a `total_time` smaller than `jev_time` alone -
+impossible, since total time wraps the whole request. Every duration in
+this codebase was measured with `time.time()` (wall-clock, which can jump
+backward on an NTP sync) instead of `time.monotonic()` (guaranteed
+monotonic). Fixed everywhere; re-verified with a clean 10-request batch -
+every timing came back positive and consistent.
+
+Sent 10 real mixed requests and answered the 4 required questions from
+real logged data (route counts, total cost, avg Jev vs. LLM time, tool
+calls blocked) - cross-checked against the new `GET /v1/stats` endpoint,
+which matched exactly. `GET /v1/requests/{id}` (also a "nice extra")
+returns one full record, request + its tool calls, step-ordered.
+→ [results/part6_logging.md](results/part6_logging.md)
+
 ## Progress
 
-See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–5 are done —
+See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–6 are done —
 Jev decides, the router picks a destination, 2 LLMs answer directly, a
-LangGraph agent uses real tools, and every tool call the agent proposes
-now passes through a real Jev-backed Safety Gate before it can run. 63
-tests total, no API key needed for most of them. Part 6 (PostgreSQL
-logging) is next.
+LangGraph agent uses real tools behind a real Jev-backed Safety Gate, and
+every request and tool call is now logged to PostgreSQL (fail-open, no
+secrets, truncated outputs). 73 tests total, no API key needed for most
+of them. Part 7 (Evaluation) is next.

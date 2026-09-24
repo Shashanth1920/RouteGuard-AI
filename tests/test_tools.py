@@ -97,6 +97,37 @@ def test_database_delete_unknown_user_is_a_clean_error():
     assert database.delete_user(999) == {"error": "user 999 not found"}
 
 
+def test_update_product_price_single_product():
+    database.reset()
+    result = database.update_product_price(price=50, product_id=1)
+    assert result == {"updated": [1], "price": 50}
+    assert database.list_products()[0]["price"] == 50
+    database.reset()
+
+
+def test_update_product_price_whole_category():
+    database.reset()
+    result = database.update_product_price(price=0, category="electronics")
+    electronics_ids = [p["id"] for p in database.list_products() if p["category"] == "electronics"]
+    assert set(result["updated"]) == set(electronics_ids)
+    assert all(p["price"] == 0 for p in database.list_products() if p["category"] == "electronics")
+    database.reset()
+
+
+def test_update_product_price_unknown_product_is_a_clean_error():
+    database.reset()
+    assert database.update_product_price(price=10, product_id=999) == {"error": "product 999 not found"}
+
+
+def test_update_product_price_unknown_category_is_a_clean_error():
+    database.reset()
+    assert database.update_product_price(price=10, category="nope") == {"error": "no products in category 'nope'"}
+
+
+def test_update_product_price_needs_a_target():
+    assert database.update_product_price(price=10) == {"error": "must specify product_id or category"}
+
+
 # --- registry --------------------------------------------------------------
 
 def test_registry_marks_delete_user_destructive():

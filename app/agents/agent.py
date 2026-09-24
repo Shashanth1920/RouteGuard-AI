@@ -48,17 +48,24 @@ class AgentState(TypedDict):
     gate_log: list
     step_count: int
     final_answer: Optional[str]
+    input_tokens: int
+    output_tokens: int
+    cost: float
 
 
 def _call_agent_llm(model: str, messages: list) -> dict:
     """One call to the model doing the thinking. A module-level function
-    (not inlined in think()) so tests can swap it for a scripted fake LLM."""
+    (not inlined in think()) so tests can swap it for a scripted fake LLM.
+    Returns the assistant message with usage stashed under "_usage" (popped
+    off again in think(), same as call_llm()'s usage reporting in
+    app/llm/client.py) - never sent back to the API as part of history."""
     resp = SESSION.post(
         CHAT_URL,
         headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
         json={
             "model": model,
             "max_tokens": LLM_MAX_TOKENS,
+            "usage": {"include": True},
             "messages": messages,
             "tools": TOOL_SCHEMAS,
             "tool_choice": "auto",
@@ -73,16 +80,26 @@ def _call_agent_llm(model: str, messages: list) -> dict:
         timeout=LLM_TIMEOUT,
     )
     resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]
+    data = resp.json()
+    message = dict(data["choices"][0]["message"])
+    message["_usage"] = data.get("usage") or {}
+    return message
 
 
 def think(state: AgentState) -> dict:
     assistant_msg = _call_agent_llm(state["model"], state["messages"])
+    usage = assistant_msg.pop("_usage", {})
+    input_tokens = state.get("input_tokens", 0) + usage.get("prompt_tokens", 0)
+    output_tokens = state.get("output_tokens", 0) + usage.get("completion_tokens", 0)
+    cost = state.get("cost", 0) + usage.get("cost", 0)
 
     tool_calls = assistant_msg.get("tool_calls")
     if not tool_calls:
         messages = state["messages"] + [assistant_msg]
-        return {"messages": messages, "final_answer": assistant_msg.get("content") or "", "proposed_tool": None}
+        return {
+            "messages": messages, "final_answer": assistant_msg.get("content") or "", "proposed_tool": None,
+            "input_tokens": input_tokens, "output_tokens": output_tokens, "cost": cost,
+        }
 
     # We only ever execute 1 tool per step. Trim the stored message to
     # match, even though parallel_tool_calls=False should already prevent
@@ -100,6 +117,7 @@ def think(state: AgentState) -> dict:
     return {
         "messages": messages,
         "proposed_tool": {"id": call["id"], "name": call["function"]["name"], "arguments": arguments},
+        "input_tokens": input_tokens, "output_tokens": output_tokens, "cost": cost,
     }
 
 
@@ -119,12 +137,16 @@ def execute_tool(state: AgentState) -> dict:
 
     if entry is None:
         output = {"error": f"unknown tool '{name}'"}
-        gate_entry = {"tool": name, "input": arguments, "result": "BLOCK", "reason": "unknown tool", "time_taken": 0.0}
+        gate_entry = {
+            "tool": name, "input": arguments, "result": "BLOCK", "reason": "unknown tool",
+            "time_taken": 0.0, "destructive_score": None, "matches_score": None,
+        }
     else:
         gate = check_gate(name, arguments, state["user_message"], entry["destructive"])
         gate_entry = {
             "tool": name, "input": arguments, "result": gate.result,
             "reason": gate.reason, "time_taken": gate.time_taken,
+            "destructive_score": gate.destructive_score, "matches_score": gate.matches_score,
         }
         if gate.result == "ALLOW":
             try:
@@ -184,7 +206,7 @@ def run_agent(message: str, complexity_label: str = "simple") -> dict:
     # live, not by a test, since the fake-LLM tests never exercised the
     # "moderate" label.
     model = STRONG_LLM_MODEL if complexity_label == "complex" else SMALL_LLM_MODEL
-    start = time.time()
+    start = time.monotonic()
     initial_state: AgentState = {
         "messages": [
             {"role": "system", "content": AGENT_SYSTEM_PROMPT},
@@ -197,6 +219,9 @@ def run_agent(message: str, complexity_label: str = "simple") -> dict:
         "gate_log": [],
         "step_count": 0,
         "final_answer": None,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost": 0.0,
     }
     result = _GRAPH.invoke(initial_state)
     return {
@@ -205,5 +230,8 @@ def run_agent(message: str, complexity_label: str = "simple") -> dict:
         "tools_used": result["tools_used"],
         "gate_log": result["gate_log"],
         "steps": result["step_count"],
-        "agent_time_taken": time.time() - start,
+        "agent_time_taken": time.monotonic() - start,
+        "input_tokens": result["input_tokens"],
+        "output_tokens": result["output_tokens"],
+        "cost": result["cost"],
     }

@@ -86,3 +86,18 @@ GATE_MATCH_CUTOFF = 0.5
 # 0.08 to 0.93, which is exactly the "update 1 price is fine, update every
 # price is risky" case the spec calls out. 0.5 sits comfortably in the gap.
 GATE_RISK_CUTOFF = 0.5
+
+# Part 6 - the record book. Docker wasn't installed on this machine, so
+# this points at a native local PostgreSQL 18 install instead (same role
+# Docker's postgres container would play - see results/part6_logging.md).
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = int(os.getenv("DB_PORT", "5432"))
+DB_NAME = os.getenv("DB_NAME", "routeguard")
+DB_TEST_NAME = os.getenv("DB_TEST_NAME", "routeguard_test")
+DB_USER = os.getenv("DB_USER", "routeguard")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+
+# Never store a full tool output - a runaway search result or a large
+# product list could otherwise bloat every row. 1000 chars is enough to
+# debug from, per the spec.
+LOG_OUTPUT_MAX_CHARS = 1000

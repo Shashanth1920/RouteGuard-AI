@@ -17,7 +17,7 @@ depends on the details of this specific call - updating 1 product's price
 is fine, updating every product's price is the same tool call shape but a
 very different risk (this was router cutoff #12's case in Part 2)."""
 import time
-from typing import Literal
+from typing import Literal, Optional
 
 import requests
 from pydantic import BaseModel
@@ -64,6 +64,10 @@ class GateResult(BaseModel):
     reason: str
     time_taken: float
     is_fallback: bool = False
+    # Raw Jev scores, kept for the audit trail (Part 6 logs these per tool
+    # call) - None only on a fail-safe, since Jev never actually answered.
+    destructive_score: Optional[float] = None
+    matches_score: Optional[float] = None
 
 
 def _fail_safe(elapsed: float) -> GateResult:
@@ -91,7 +95,7 @@ def check_gate(tool_name: str, arguments: dict, user_message: str, destructive_l
     }
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
 
-    start = time.time()
+    start = time.monotonic()
     try:
         response = SESSION.post(API_URL, headers=headers, json=payload, timeout=JEV_TIMEOUT)
         response.raise_for_status()
@@ -99,26 +103,31 @@ def check_gate(tool_name: str, arguments: dict, user_message: str, destructive_l
         destructive = answers["destructive"]["noul"]
         matches = answers["matches"]["noul"]
     except (requests.RequestException, KeyError, ValueError):
-        return _fail_safe(time.time() - start)
+        return _fail_safe(time.monotonic() - start)
 
-    elapsed = time.time() - start
+    elapsed = time.monotonic() - start
+
+    scores = {"destructive_score": destructive, "matches_score": matches}
 
     if matches < GATE_MATCH_CUTOFF:
         return GateResult(
             result="BLOCK",
             reason=f"doesn't match the request (match score {matches:.2f} < {GATE_MATCH_CUTOFF})",
-            time_taken=elapsed,
+            time_taken=elapsed, **scores,
         )
     if destructive_label:
         return GateResult(
             result="NEEDS_APPROVAL",
             reason=f"tool '{tool_name}' is marked destructive - never runs automatically",
-            time_taken=elapsed,
+            time_taken=elapsed, **scores,
         )
     if destructive >= GATE_RISK_CUTOFF:
         return GateResult(
             result="NEEDS_APPROVAL",
             reason=f"Jev flagged this specific call as risky (score {destructive:.2f} >= {GATE_RISK_CUTOFF})",
-            time_taken=elapsed,
+            time_taken=elapsed, **scores,
         )
-    return GateResult(result="ALLOW", reason="matches the request, not destructive, low risk", time_taken=elapsed)
+    return GateResult(
+        result="ALLOW", reason="matches the request, not destructive, low risk",
+        time_taken=elapsed, **scores,
+    )

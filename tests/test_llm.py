@@ -57,6 +57,7 @@ def test_agent_route_delegates_to_run_agent_not_call_llm(monkeypatch):
             "tools_used": [{"name": "calculator", "input": {}, "output": {}}],
             "gate_log": [{"tool": "calculator", "input": {}, "result": "ALLOW", "reason": "ok"}],
             "steps": 1, "agent_time_taken": 0.2,
+            "input_tokens": 42, "output_tokens": 7, "cost": 0.0005,
         },
     )
     result = llm.get_answer("agent", "What's 847 times 23?")
@@ -64,6 +65,9 @@ def test_agent_route_delegates_to_run_agent_not_call_llm(monkeypatch):
     assert result["answer"] == "19481"
     assert result["steps"] == 1
     assert result["tools_used"][0]["name"] == "calculator"
+    assert result["input_tokens"] == 42
+    assert result["output_tokens"] == 7
+    assert result["cost"] == 0.0005
 
 
 def test_small_llm_failure_backs_up_to_strong_llm(monkeypatch):

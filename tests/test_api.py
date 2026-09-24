@@ -1,4 +1,5 @@
 """API tests use a fake classify() - no network, no API key needed."""
+import pytest
 from fastapi.testclient import TestClient
 
 import app.api.routes as routes
@@ -6,6 +7,14 @@ from app.decision.schemas import Decision
 from app.main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_logging(monkeypatch):
+    """These tests use a fake classify() and shouldn't also write rows into
+    the real database - that's app/db/test_logging.py's job, against a
+    dedicated test database."""
+    monkeypatch.setattr(routes, "save_request", lambda *a, **k: None)
 
 
 def _fake_classify_factory(**overrides):

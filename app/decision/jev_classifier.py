@@ -110,10 +110,10 @@ def classify(message: str) -> Decision:
         "Content-Type": "application/json",
     }
 
-    start = time.time()
+    start = time.monotonic()
     try:
         response = SESSION.post(API_URL, headers=headers, json=payload, timeout=JEV_TIMEOUT)
-        elapsed = time.time() - start
+        elapsed = time.monotonic() - start
         response.raise_for_status()
         answers = response.json()["answers"]
         complexity_score = answers["complexity"]["score"]
@@ -128,5 +128,5 @@ def classify(message: str) -> Decision:
             time_taken=elapsed,
         )
     except (requests.RequestException, KeyError, ValueError, ValidationError):
-        elapsed = time.time() - start
+        elapsed = time.monotonic() - start
         return _fail_safe(elapsed)
