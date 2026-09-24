@@ -9,15 +9,27 @@ decision model from TypeSafe AI (not a text-generating LLM like GPT).
 
 ```
 routeguard-ai/
-├── hello_jev.py          Part 1: first working call to Jev (1 question: intent)
-├── decision_engine.py    Part 2: 4 questions per message in a single call
+├── app/
+│   ├── config.py              API key, model, timeout, router cutoffs — all in one place
+│   ├── decision/
+│   │   ├── schemas.py         The Decision "form" (Pydantic)
+│   │   └── jev_classifier.py  Calls Jev, fills the form, fail-safe on error
+│   └── routing/
+│       └── router.py          Pure-Python rules: Decision -> RouteResult (no AI, no API calls)
+├── tests/
+│   ├── test_decisions.py      Fake-Jev tests (no network) + a few real Jev calls
+│   └── test_routing.py        Hand-made Decisions, no network at all
+├── hello_jev.py                Part 1: first working call to Jev (1 question: intent)
+├── decision_engine.py           Part 2 script: 4 questions per message in a single call
+├── run_pipeline.py               Runs 25 sentences through classify() + route(), prints the table
 ├── results/
-│   ├── part1.md          Part 1 input/output + write-up
-│   └── part2.md          Part 2 input/output + write-up, incl. fix history
-├── experiments/          Raw JSON responses saved from real runs (proof of work)
-├── TASKS.md              8-part build checklist, checked off as we go
-├── .env                  Your OpenRouter API key (not committed — see .gitignore)
-└── venv/                 Python virtual environment (not committed)
+│   ├── part1.md                 Part 1 input/output + write-up
+│   ├── part2.md                 Part 2 input/output + write-up, incl. fix history
+│   └── part2_router.md          Router: 25-sentence table, cutoff reasoning, verification
+├── experiments/                 Raw JSON responses saved from real runs (proof of work)
+├── TASKS.md                     8-part build checklist, checked off as we go
+├── .env                         Your OpenRouter API key (not committed — see .gitignore)
+└── venv/                        Python virtual environment (not committed)
 ```
 
 ## Setup
@@ -25,7 +37,7 @@ routeguard-ai/
 ```
 python -m venv venv
 venv\Scripts\activate
-pip install requests python-dotenv
+pip install requests python-dotenv pydantic pytest
 ```
 
 Put your key in `.env`:
@@ -37,7 +49,9 @@ OPENROUTER_API_KEY=your_key_here
 
 ```
 venv\Scripts\python.exe hello_jev.py        # Part 1: intent only
-venv\Scripts\python.exe decision_engine.py  # Part 2: intent + complexity + risk + needs_tool
+venv\Scripts\python.exe decision_engine.py  # Part 2 script: intent + complexity + risk + needs_tool
+venv\Scripts\python.exe run_pipeline.py     # engine + router together, on all 25 sentences
+venv\Scripts\python.exe -m pytest tests/ -v # 23 tests (fake ones need no API key)
 ```
 
 ## What's been done — in plain terms
@@ -83,8 +97,30 @@ Two rough edges got caught during review and partly fixed:
 → Full before/after numbers and an explanation of how to independently
 verify these results are real (not made up): [results/part2.md](results/part2.md)
 
+This got promoted into a real module (`app/decision/`) with a proper
+`Decision` form: a `Pydantic` model that rejects bad data (an unrecognized
+intent, a risk value outside 0–1) instead of silently passing it through,
+plus an `is_fallback` flag so a Jev failure is never confused with a
+genuinely high-risk request in the logs later — a "receptionist was
+absent, treated as an emergency" note, not just "emergency."
+
+**The Router** is the hospital rulebook: given a filled-out `Decision`, 6
+plain Python `if` statements — no AI, no API calls — decide where the
+request goes: `human_review`, `strong_llm`, `agent`, or `small_llm`.
+Safety checks run first, so something simple-but-dangerous (like "delete
+all users") can't slip past the risk check just because it looked cheap
+to answer. Every decision comes with a written reason
+("risk 0.95 ≥ 0.5") so it can be logged and explained later, not just
+acted on silently. All 3 cutoffs that tune this (how much risk is too
+much, how unsure is "unsure," etc.) live in `app/config.py`, chosen from
+real numbers on the 25 test sentences — not guessed.
+→ Full 25-sentence table, cutoff reasoning, and verification:
+[results/part2_router.md](results/part2_router.md)
+
 ## Progress
 
-See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–2 (decision
-engine half) are done; the "+ Router" half of Part 2 — actually sending
-each message to the right handler based on Jev's answer — is next.
+See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–2 are done —
+the Decision Engine reports facts, the Router decides where a request
+goes, and 23 tests cover both without needing an API key for most of
+them. Part 3 (FastAPI + LLMs — actually wiring the 4 destinations up to
+real models) is next.
