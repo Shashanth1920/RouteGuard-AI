@@ -104,7 +104,10 @@ just because it looked simple.
 ```
 routeguard-ai/
 ├── app/
+│   ├── main.py                 Creates the FastAPI app
 │   ├── config.py              API key, model, timeout, router cutoffs — all in one place
+│   ├── api/
+│   │   └── routes.py           POST /v1/route, GET /health — thin, no routing logic
 │   ├── decision/
 │   │   ├── schemas.py         The Decision "form" (Pydantic)
 │   │   └── jev_classifier.py  Calls Jev, fills the form, fail-safe on error
@@ -112,7 +115,8 @@ routeguard-ai/
 │       └── router.py          Pure-Python rules: Decision -> RouteResult (no AI, no API calls)
 ├── tests/
 │   ├── test_decisions.py      Fake-Jev tests (no network) + a few real Jev calls
-│   └── test_routing.py        Hand-made Decisions, no network at all
+│   ├── test_routing.py        Hand-made Decisions, no network at all
+│   └── test_api.py             FastAPI TestClient + fake classify() — no network
 ├── hello_jev.py                Part 1: first working call to Jev (1 question: intent)
 ├── decision_engine.py           Part 2 script: 4 questions per message in a single call
 ├── run_pipeline.py               Runs 25 sentences through classify() + route(), prints the table
@@ -131,7 +135,7 @@ routeguard-ai/
 ```
 python -m venv venv
 venv\Scripts\activate
-pip install requests python-dotenv pydantic pytest
+pip install requests python-dotenv pydantic pytest fastapi uvicorn httpx
 ```
 
 Put your key in `.env`:
@@ -145,7 +149,8 @@ OPENROUTER_API_KEY=your_key_here
 venv\Scripts\python.exe hello_jev.py        # Part 1: intent only
 venv\Scripts\python.exe decision_engine.py  # Part 2 script: intent + complexity + risk + needs_tool
 venv\Scripts\python.exe run_pipeline.py     # engine + router together, on all 25 sentences
-venv\Scripts\python.exe -m pytest tests/ -v # 23 tests (fake ones need no API key)
+venv\Scripts\python.exe -m pytest tests/ -v # 28 tests (fake ones need no API key)
+venv\Scripts\python.exe -m uvicorn app.main:app --port 8000  # web service; open http://localhost:8000/docs
 ```
 
 ## What's been done — in plain terms
@@ -211,10 +216,27 @@ real numbers on the 25 test sentences — not guessed.
 → Full 25-sentence table, cutoff reasoning, and verification:
 [results/part2_router.md](results/part2_router.md)
 
+**Part 3, Step 1** puts the whole thing behind a web front door with
+[FastAPI](https://fastapi.tiangolo.com/): `POST /v1/route` takes a
+message and returns the decision, the route, and why — over HTTP, so
+any app can use it, not just Python scripts run by hand. `GET /health`
+is a heartbeat check for later (Docker will poll it in Part 8). The
+endpoint is deliberately "thin" — `app/api/routes.py` only calls
+`classify()` then `route()`, no logic of its own; if a rule needs to
+change, it changes in `router.py`, never here. The endpoint function is
+a plain `def`, not `async def` — `classify()` uses `requests`, which
+blocks the current thread while waiting on Jev, and FastAPI runs plain
+`def` endpoints in a worker thread pool so one slow Jev call doesn't
+freeze every other user's request. `async def` would have looked fine
+locally with one user and then serialized every request in production.
+Verified live: `Delete all users` → real Jev call → `human_review`
+(risk 0.97), an empty message → `422` rejected automatically before it
+ever reaches Jev, both through the actual running server, not just tests.
+→ [app/main.py](app/main.py), [app/api/routes.py](app/api/routes.py)
+
 ## Progress
 
-See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–2 are done —
-the Decision Engine reports facts, the Router decides where a request
-goes, and 23 tests cover both without needing an API key for most of
-them. Part 3 (FastAPI + LLMs — actually wiring the 4 destinations up to
-real models) is next.
+See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–2 are done.
+Part 3 Step 1 (FastAPI web service) is done — 28 tests total, no API
+key needed for most of them. Step 2 (wiring the 4 destinations up to
+real LLMs) is next.
