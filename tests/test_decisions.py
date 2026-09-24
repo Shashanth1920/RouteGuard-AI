@@ -49,10 +49,13 @@ def test_classify_fills_form_from_normal_response(monkeypatch):
     assert decision.complexity_label == "simple"
     assert decision.risk == 0.01
     assert decision.needs_tool == 0.8
+    assert decision.is_fallback is False
     assert isinstance(decision.time_taken, float)
 
 
 # --- fake Jev: errors/timeouts return the safe form, never "low risk" -------
+# and are marked is_fallback=True so they're never confused with a real
+# risk=1.0 assessment later, in logs or evaluation.
 
 def test_classify_returns_fail_safe_on_timeout(monkeypatch):
     def raise_timeout(*a, **k):
@@ -65,6 +68,8 @@ def test_classify_returns_fail_safe_on_timeout(monkeypatch):
     assert decision.needs_tool == 1.0
     assert decision.complexity_label == "complex"
     assert decision.complexity_score == 2.0
+    assert decision.is_fallback is True
+    assert decision.intent == "unknown"
 
 
 def test_classify_returns_fail_safe_on_http_error(monkeypatch):
@@ -73,6 +78,8 @@ def test_classify_returns_fail_safe_on_http_error(monkeypatch):
 
     assert decision.risk == 1.0
     assert decision.complexity_label == "complex"
+    assert decision.is_fallback is True
+    assert decision.intent == "unknown"
 
 
 def test_classify_returns_fail_safe_on_malformed_json(monkeypatch):
@@ -82,12 +89,15 @@ def test_classify_returns_fail_safe_on_malformed_json(monkeypatch):
 
     assert decision.risk == 1.0
     assert decision.needs_tool == 1.0
+    assert decision.is_fallback is True
+    assert decision.intent == "unknown"
 
 
 def test_fail_safe_never_reports_low_risk(monkeypatch):
     monkeypatch.setattr(jc.SESSION, "post", lambda *a, **k: (_ for _ in ()).throw(requests.ConnectionError()))
     decision = jc.classify("test")
     assert decision.risk >= 0.5  # fail safe must never look "low risk" by accident
+    assert decision.is_fallback is True  # and must never be confused with a real risk=1.0 verdict
 
 
 # --- complexity number -> label -----------------------------------------------
@@ -118,3 +128,4 @@ def test_classify_real_sentences(sentence):
     assert 0 <= decision.needs_tool <= 1
     assert decision.complexity_label in {"simple", "moderate", "complex"}
     assert decision.time_taken > 0
+    assert decision.is_fallback is False  # a genuine answer, not a masked failure

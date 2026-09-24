@@ -86,13 +86,14 @@ def _complexity_label(score: float) -> str:
 
 def _fail_safe(elapsed: float) -> Decision:
     return Decision(
-        intent="general",
+        intent="unknown",
         intent_confidence=0.0,
         complexity_score=2.0,
         complexity_label="complex",
         risk=1.0,
         needs_tool=1.0,
         time_taken=elapsed,
+        is_fallback=True,
     )
 
 

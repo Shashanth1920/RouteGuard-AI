@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-Intent = Literal["calculation", "coding", "search", "database action", "action", "general"]
+Intent = Literal["calculation", "coding", "search", "database action", "action", "general", "unknown"]
 ComplexityLabel = Literal["simple", "moderate", "complex"]
 
 
@@ -17,3 +17,7 @@ class Decision(BaseModel):
     risk: float = Field(ge=0, le=1)
     needs_tool: float = Field(ge=0, le=1)
     time_taken: float
+    is_fallback: bool = False
+    """True means Jev didn't actually answer - this is the safe-guess form,
+    not a real assessment. "risk=1.0, is_fallback=True" reads as "receptionist
+    was absent, treated as an emergency to be safe", never just "emergency"."""
