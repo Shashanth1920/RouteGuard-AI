@@ -120,15 +120,18 @@ routeguard-ai/
 │   │   ├── search.py           Tavily web search — top 3 results, treated as untrusted data
 │   │   ├── database.py         Fake in-memory 10-user list — list/read/delete + reset()
 │   │   └── registry.py         Every tool + its name/description/risk/destructive label + param schema
-│   └── agents/
-│       └── agent.py            Hand-built LangGraph agent: think -> propose_tool -> execute_tool loop
+│   ├── agents/
+│   │   └── agent.py            Hand-built LangGraph agent: think -> propose_tool -> execute_tool loop
+│   └── safety/
+│       └── gate.py             The pharmacist: 2 Jev questions per proposed tool call, before it runs
 ├── tests/
 │   ├── test_decisions.py      Fake-Jev tests (no network) + a few real Jev calls
 │   ├── test_routing.py        Hand-made Decisions, no network at all
 │   ├── test_api.py             FastAPI TestClient + fake classify() — no network
 │   ├── test_llm.py             Fake call_llm() — no network, proves human_review = 0 LLM calls
 │   ├── test_tools.py           Calculator/search/database/registry — no real API calls
-│   └── test_agent.py           Scripted fake LLM — no network, proves loop/stop/block behavior
+│   ├── test_agent.py           Scripted fake LLM + fake gate — no network, proves loop/stop/block behavior
+│   └── test_gate.py            Fake Jev — no network, proves ALLOW/NEEDS_APPROVAL/BLOCK rules
 ├── hello_jev.py                Part 1: first working call to Jev (1 question: intent)
 ├── decision_engine.py           Part 2 script: 4 questions per message in a single call
 ├── run_pipeline.py               Runs 25 sentences through classify() + route(), prints the table
@@ -161,7 +164,7 @@ OPENROUTER_API_KEY=your_key_here
 venv\Scripts\python.exe hello_jev.py        # Part 1: intent only
 venv\Scripts\python.exe decision_engine.py  # Part 2 script: intent + complexity + risk + needs_tool
 venv\Scripts\python.exe run_pipeline.py     # engine + router together, on all 25 sentences
-venv\Scripts\python.exe -m pytest tests/ -v # 52 tests (fake ones need no API key)
+venv\Scripts\python.exe -m pytest tests/ -v # 63 tests (fake ones need no API key)
 venv\Scripts\python.exe -m uvicorn app.main:app --port 8000  # web service; open http://localhost:8000/docs
 ```
 
@@ -311,11 +314,40 @@ first, `human_review`, zero calls — the destructive-tool lock in the
 agent is a second layer, not the only one.
 → [results/part4_agent.md](results/part4_agent.md)
 
+**Part 5** replaces the agent's temporary "block every destructive tool"
+lock with the real thing: a Safety Gate (`app/safety/gate.py`) that runs
+inside `execute_tool` - the only place any tool's function is ever
+called - and asks Jev 2 questions about *this specific proposed call*:
+is it destructive, and does it actually match what the user asked for.
+First match wins: Jev failure → `NEEDS_APPROVAL`, mismatch → `BLOCK`,
+tool marked destructive → `NEEDS_APPROVAL` (never automatic), Jev flags
+this call as risky → `NEEDS_APPROVAL`, else → `ALLOW`.
+
+Why the router (Part 2) alone isn't enough: it only ever sees the user's
+original message, decided once, up front. The agent can decide things on
+its own afterward - including after reading a tool result - so only a
+check running right before each tool executes can catch something the
+agent talks itself into. Confirmed live with the exact "same tool,
+different scope" case the spec calls out: updating 1 product's price
+scored destructive 0.08, updating every product in a category scored
+0.93 - same registry label, very different real risk.
+
+The injection demo: fed the agent a fake, poisoned search result
+instructing it to delete a user, for real, 3 times with increasingly
+aggressive wording. All 3 times `openai/gpt-5.6-luna` recognized it as
+untrusted tool content and refused - a real result, not staged. Since
+the model defended itself, the gate never got a live end-to-end block to
+show off, so its own defense was verified independently: `check_gate()`
+called directly with the exact mismatch shape a successful injection
+would produce returned `BLOCK` with a real Jev call (match score 0.01).
+Both layers verified, not just the one that held.
+→ [results/part5_gate.md](results/part5_gate.md)
+
 ## Progress
 
-See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–4 are done —
-Jev decides, the router picks a destination, 2 LLMs answer directly, and
-a LangGraph agent can now use real tools (calculator, search, a fake
-database) with a step limit and a destructive-action lock. 52 tests
-total, no API key needed for most of them. Part 5 (the real Safety Gate)
-is next.
+See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–5 are done —
+Jev decides, the router picks a destination, 2 LLMs answer directly, a
+LangGraph agent uses real tools, and every tool call the agent proposes
+now passes through a real Jev-backed Safety Gate before it can run. 63
+tests total, no API key needed for most of them. Part 6 (PostgreSQL
+logging) is next.

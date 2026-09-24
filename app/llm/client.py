@@ -64,7 +64,7 @@ def call_llm(model: str, message: str) -> LLMAnswer:
 _EMPTY = {
     "answer": None, "model_used": None, "input_tokens": None,
     "output_tokens": None, "cost": None, "llm_time_taken": None, "error": None,
-    "tools_used": None, "steps": None,
+    "tools_used": None, "steps": None, "gate_log": None,
 }
 
 
@@ -78,6 +78,7 @@ def get_answer(route: str, message: str, complexity_label: str = "simple") -> di
             "answer": result["answer"],
             "model_used": result["model_used"],
             "tools_used": result["tools_used"],
+            "gate_log": result["gate_log"],
             "steps": result["steps"],
             "llm_time_taken": result["agent_time_taken"],
         }

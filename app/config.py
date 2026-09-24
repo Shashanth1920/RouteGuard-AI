@@ -67,3 +67,22 @@ INTENT_CONFIDENCE_CUTOFF = 0.7
 # a weakness in Jev's own scoring for search-flavored questions, not
 # something this cutoff can fix.
 NEEDS_TOOL_CUTOFF = 0.4
+
+# Part 5 - Safety Gate cutoffs. Chosen from real check_gate() calls (see
+# results/part5_gate.md).
+#
+# matches: genuine mismatches (agent asked to search, proposes delete_user;
+# or asked to update 1 product, proposes updating a whole category) scored
+# 0.01-0.03. Genuine matches scored 0.56-0.96 - the low end being "update
+# this product's price" matched against a tool call that also updates it,
+# worded loosely enough that Jev wasn't fully confident. 0.5 sits in the
+# gap, closer to the match side; if a future real case scores close to 0.5
+# on the match side, this may need tightening with more data.
+GATE_MATCH_CUTOFF = 0.5
+#
+# destructive: single-record reads/updates scored <= 0.08. Deleting a user
+# or updating every row in a category (not just one) scored >= 0.93 - the
+# same tool, single-product-update vs. whole-category-update, swung from
+# 0.08 to 0.93, which is exactly the "update 1 price is fine, update every
+# price is risky" case the spec calls out. 0.5 sits comfortably in the gap.
+GATE_RISK_CUTOFF = 0.5

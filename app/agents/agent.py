@@ -1,9 +1,8 @@
 """The doctor that uses the equipment. Built by hand with LangGraph's
 StateGraph (not the prebuilt create_react_agent) because "propose tool" and
-"execute tool" must be 2 separate steps - Part 5's Safety Gate goes right
-between them, like a nurse checking a prescription before the medicine is
-given. Building it now with 2 steps means Part 5 doesn't require rebuilding
-the graph, only replacing what execute_tool does with the proposal.
+"execute tool" are 2 separate steps - the Safety Gate (app/safety/gate.py)
+runs inside execute_tool, right before any tool's func is actually called,
+like a pharmacist checking a prescription before the medicine is given.
 
 Flow: think -> (wants a tool?) -> propose_tool -> execute_tool -> think
                 (ready?)        -> answer -> end
@@ -24,6 +23,7 @@ from app.config import (
     SMALL_LLM_MODEL,
     STRONG_LLM_MODEL,
 )
+from app.safety.gate import check_gate
 from app.tools.registry import TOOLS
 
 CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -42,8 +42,10 @@ TOOL_SCHEMAS = [
 class AgentState(TypedDict):
     messages: list
     model: str
+    user_message: str
     proposed_tool: Optional[dict]
     tools_used: list
+    gate_log: list
     step_count: int
     final_answer: Optional[str]
 
@@ -109,26 +111,34 @@ def propose_tool(state: AgentState) -> dict:
 
 
 def execute_tool(state: AgentState) -> dict:
+    """The only place any tool's func actually runs. Every proposal goes
+    through check_gate() first - there is no other path to entry["func"]."""
     proposal = state["proposed_tool"]
     name, arguments = proposal["name"], proposal["arguments"]
     entry = TOOLS_BY_NAME.get(name)
 
     if entry is None:
         output = {"error": f"unknown tool '{name}'"}
-    elif entry["destructive"]:
-        # Temporary lock until Part 5 replaces this with the real Jev
-        # Safety Gate. No destructive tool runs without it.
-        output = {"error": "blocked: needs approval"}
+        gate_entry = {"tool": name, "input": arguments, "result": "BLOCK", "reason": "unknown tool", "time_taken": 0.0}
     else:
-        try:
-            output = entry["func"](**arguments)
-        except Exception as e:
-            output = {"error": str(e)}
+        gate = check_gate(name, arguments, state["user_message"], entry["destructive"])
+        gate_entry = {
+            "tool": name, "input": arguments, "result": gate.result,
+            "reason": gate.reason, "time_taken": gate.time_taken,
+        }
+        if gate.result == "ALLOW":
+            try:
+                output = entry["func"](**arguments)
+            except Exception as e:
+                output = {"error": str(e)}
+        else:
+            output = {"error": f"{gate.result.lower()}: {gate.reason}"}
 
     tool_message = {"role": "tool", "tool_call_id": proposal["id"], "content": json.dumps(output)}
     return {
         "messages": state["messages"] + [tool_message],
         "tools_used": state["tools_used"] + [{"name": name, "input": arguments, "output": output}],
+        "gate_log": state["gate_log"] + [gate_entry],
         "step_count": state["step_count"] + 1,
         "proposed_tool": None,
     }
@@ -181,8 +191,10 @@ def run_agent(message: str, complexity_label: str = "simple") -> dict:
             {"role": "user", "content": message},
         ],
         "model": model,
+        "user_message": message,
         "proposed_tool": None,
         "tools_used": [],
+        "gate_log": [],
         "step_count": 0,
         "final_answer": None,
     }
@@ -191,6 +203,7 @@ def run_agent(message: str, complexity_label: str = "simple") -> dict:
         "answer": result["final_answer"],
         "model_used": model,
         "tools_used": result["tools_used"],
+        "gate_log": result["gate_log"],
         "steps": result["step_count"],
         "agent_time_taken": time.time() - start,
     }

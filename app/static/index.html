@@ -62,6 +62,15 @@
   }
   .tool-name { color: #85a5ff; font-weight: 700; font-family: ui-monospace, monospace; }
   .tool-io { color: #b8bcc4; font-family: ui-monospace, monospace; white-space: pre-wrap; margin-top: 4px; word-break: break-all; }
+  .gate-verdict {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-weight: 700; font-size: 0.78rem; margin-right: 8px;
+  }
+  .gate-ALLOW { background: #40c05733; color: #8ce99a; border: 1px solid #40c057; }
+  .gate-NEEDS_APPROVAL { background: #ffa94033; color: #ffc078; border: 1px solid #ffa940; }
+  .gate-BLOCK { background: #ff4d4f33; color: #ff7875; border: 1px solid #ff4d4f; }
+  .gate-reason { color: #b8bcc4; font-size: 0.85rem; margin-top: 4px; }
+  .gate-time { color: #6b7280; font-size: 0.78rem; margin-left: 6px; }
   details { margin-top: 8px; }
   summary { cursor: pointer; color: #9aa0a6; font-size: 0.85rem; }
   pre { background: #0d0e12; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.8rem; }
@@ -107,6 +116,11 @@
   <div class="card" id="toolsCard" style="display:none">
     <h3>Tools called <span id="stepsLabel"></span></h3>
     <div id="toolsList"></div>
+  </div>
+
+  <div class="card" id="gateCard" style="display:none">
+    <h3>Safety Gate — every proposed tool call checked before it ran</h3>
+    <div id="gateList"></div>
   </div>
 
   <div class="card">
@@ -185,6 +199,7 @@ form.addEventListener('submit', async (e) => {
       document.getElementById('decisionTable').innerHTML = '';
       document.getElementById('execTable').innerHTML = '';
       document.getElementById('toolsCard').style.display = 'none';
+      document.getElementById('gateCard').style.display = 'none';
       document.getElementById('rawJson').textContent = JSON.stringify(data, null, 2);
       result.style.display = 'block';
       return;
@@ -232,6 +247,23 @@ form.addEventListener('submit', async (e) => {
       toolsList.innerHTML = '';
       toolsSummary.innerHTML = data.route === 'agent'
         ? '<span class="pill">No tool used — answered directly</span>' : '';
+    }
+
+    const gateCard = document.getElementById('gateCard');
+    const gateList = document.getElementById('gateList');
+    if (data.gate_log && data.gate_log.length) {
+      gateCard.style.display = 'block';
+      gateList.innerHTML = data.gate_log.map(g => `
+        <div class="tool-call">
+          <span class="gate-verdict gate-${g.result}">${g.result}</span>
+          <span class="tool-name">${g.tool}</span>
+          <span class="gate-time">${g.time_taken != null ? fmt(g.time_taken) + 's' : ''}</span>
+          <div class="gate-reason">${g.reason}</div>
+        </div>
+      `).join('');
+    } else {
+      gateCard.style.display = 'none';
+      gateList.innerHTML = '';
     }
 
     const d = data.decision;

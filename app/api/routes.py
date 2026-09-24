@@ -32,6 +32,7 @@ class RouteResponse(BaseModel):
     llm_time_taken: Optional[float] = None
     error: Optional[str] = None
     tools_used: Optional[list[dict[str, Any]]] = None
+    gate_log: Optional[list[dict[str, Any]]] = None
     steps: Optional[int] = None
 
 

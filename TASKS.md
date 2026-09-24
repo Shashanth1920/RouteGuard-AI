@@ -2,7 +2,7 @@
 - [x] Part 2: Decision Engine + Router
 - [x] Part 3: FastAPI + LLMs
 - [x] Part 4: LangGraph agent + tools
-- [ ] Part 5: Safety Gate
+- [x] Part 5: Safety Gate
 - [ ] Part 6: PostgreSQL logging
 - [ ] Part 7: Evaluation
 - [ ] Part 8: Docker + README

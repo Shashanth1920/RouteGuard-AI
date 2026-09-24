@@ -55,6 +55,7 @@ def test_agent_route_delegates_to_run_agent_not_call_llm(monkeypatch):
         lambda message, complexity_label: {
             "answer": "19481", "model_used": SMALL_LLM_MODEL,
             "tools_used": [{"name": "calculator", "input": {}, "output": {}}],
+            "gate_log": [{"tool": "calculator", "input": {}, "result": "ALLOW", "reason": "ok"}],
             "steps": 1, "agent_time_taken": 0.2,
         },
     )

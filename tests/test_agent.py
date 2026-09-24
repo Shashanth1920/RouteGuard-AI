@@ -1,10 +1,12 @@
 """Fake-LLM tests - no network, no API key. The fake LLM follows a script
-of canned OpenRouter-shaped assistant messages, so these tests prove the
+of canned OpenRouter-shaped assistant messages, and check_gate() is faked
+too (see test_gate.py for the gate's own rules), so these tests prove the
 graph's wiring (propose -> execute -> loop / stop) without ever calling a
-real model."""
+real model or a real Jev gate check."""
 import itertools
 
 from app.agents import agent
+from app.safety.gate import GateResult
 from app.tools import database
 
 
@@ -31,12 +33,19 @@ def _scripted_llm(responses):
     return _fake
 
 
+def _fake_gate(result="ALLOW", reason="ok"):
+    def _fake(tool_name, arguments, user_message, destructive_label):
+        return GateResult(result=result, reason=reason, time_taken=0.01)
+    return _fake
+
+
 def test_calculator_tool_used_then_final_answer(monkeypatch):
     fake = _scripted_llm([
         _tool_call_msg("calculator", '{"expression": "847 * 23"}'),
         _answer_msg("The result is 19481."),
     ])
     monkeypatch.setattr(agent, "_call_agent_llm", fake)
+    monkeypatch.setattr(agent, "check_gate", _fake_gate("ALLOW"))
 
     result = agent.run_agent("What is 847 * 23?")
 
@@ -45,11 +54,15 @@ def test_calculator_tool_used_then_final_answer(monkeypatch):
     assert result["tools_used"] == [
         {"name": "calculator", "input": {"expression": "847 * 23"}, "output": {"result": 19481, "error": None}}
     ]
+    assert result["gate_log"] == [
+        {"tool": "calculator", "input": {"expression": "847 * 23"}, "result": "ALLOW", "reason": "ok", "time_taken": 0.01}
+    ]
 
 
 def test_infinite_tool_requests_stop_at_max_steps(monkeypatch):
     fake = _scripted_llm(itertools.repeat(_tool_call_msg("calculator", '{"expression": "1 + 1"}')))
     monkeypatch.setattr(agent, "_call_agent_llm", fake)
+    monkeypatch.setattr(agent, "check_gate", _fake_gate("ALLOW"))
 
     result = agent.run_agent("keep going forever")
 
@@ -59,19 +72,60 @@ def test_infinite_tool_requests_stop_at_max_steps(monkeypatch):
     assert "maximum" in result["answer"].lower()
 
 
-def test_destructive_tool_is_blocked_and_user_still_exists(monkeypatch):
+def test_destructive_tool_needs_approval_and_user_still_exists(monkeypatch):
     database.reset()
     fake = _scripted_llm([
         _tool_call_msg("delete_user", '{"user_id": 3}'),
         _answer_msg("I can't delete that user without approval."),
     ])
     monkeypatch.setattr(agent, "_call_agent_llm", fake)
+    monkeypatch.setattr(
+        agent, "check_gate",
+        _fake_gate("NEEDS_APPROVAL", "tool 'delete_user' is marked destructive - never runs automatically"),
+    )
 
     result = agent.run_agent("delete user 3")
 
-    assert result["tools_used"][0]["output"] == {"error": "blocked: needs approval"}
+    assert result["tools_used"][0]["output"]["error"].startswith("needs_approval:")
     assert database.read_user(3)["name"] == "Carla Reyes"
     database.reset()
+
+
+def test_mismatched_tool_is_blocked(monkeypatch):
+    # Prompt-injection shape: user asked to search, the agent (having read
+    # a poisoned result, or just misbehaving) proposes delete_user instead.
+    fake = _scripted_llm([
+        _tool_call_msg("delete_user", '{"user_id": 3}'),
+        _answer_msg("I won't do that - it doesn't match your request."),
+    ])
+    monkeypatch.setattr(agent, "_call_agent_llm", fake)
+    monkeypatch.setattr(agent, "check_gate", _fake_gate("BLOCK", "doesn't match the request (match score 0.02 < 0.5)"))
+
+    database.reset()
+    result = agent.run_agent("Search for info about our users")
+
+    assert result["tools_used"][0]["output"]["error"].startswith("block:")
+    assert database.read_user(3)["name"] == "Carla Reyes"
+
+
+def test_no_tool_runs_without_passing_the_gate(monkeypatch):
+    """The single most important guarantee: there is no shortcut path to a
+    tool's func. Proven by making the gate always say BLOCK and the tool's
+    own func explode if it's ever called - it never is."""
+    def _explode(**kwargs):
+        raise AssertionError("calculator.calculate() ran without gate approval")
+    monkeypatch.setitem(agent.TOOLS_BY_NAME["calculator"], "func", _explode)
+    monkeypatch.setattr(agent, "check_gate", _fake_gate("BLOCK", "doesn't match the request (match score 0.0 < 0.5)"))
+
+    fake = _scripted_llm([
+        _tool_call_msg("calculator", '{"expression": "1 + 1"}'),
+        _answer_msg("blocked"),
+    ])
+    monkeypatch.setattr(agent, "_call_agent_llm", fake)
+
+    result = agent.run_agent("what is 1 + 1?")
+
+    assert result["tools_used"][0]["output"]["error"].startswith("block:")
 
 
 def test_tool_error_is_handled_and_agent_still_answers(monkeypatch):
@@ -80,6 +134,7 @@ def test_tool_error_is_handled_and_agent_still_answers(monkeypatch):
         _answer_msg("That user doesn't exist."),
     ])
     monkeypatch.setattr(agent, "_call_agent_llm", fake)
+    monkeypatch.setattr(agent, "check_gate", _fake_gate("ALLOW"))
 
     result = agent.run_agent("read user 999")
 
