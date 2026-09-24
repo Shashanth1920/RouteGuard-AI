@@ -107,16 +107,19 @@ routeguard-ai/
 │   ├── main.py                 Creates the FastAPI app
 │   ├── config.py              API key, model, timeout, router cutoffs — all in one place
 │   ├── api/
-│   │   └── routes.py           POST /v1/route, GET /health — thin, no routing logic
+│   │   └── routes.py           POST /v1/route, GET /health — thin, no routing/LLM logic of its own
 │   ├── decision/
 │   │   ├── schemas.py         The Decision "form" (Pydantic)
 │   │   └── jev_classifier.py  Calls Jev, fills the form, fail-safe on error
-│   └── routing/
-│       └── router.py          Pure-Python rules: Decision -> RouteResult (no AI, no API calls)
+│   ├── routing/
+│   │   └── router.py          Pure-Python rules: Decision -> RouteResult (no AI, no API calls)
+│   └── llm/
+│       └── client.py           call_llm() + get_answer(): route -> model, backup on failure
 ├── tests/
 │   ├── test_decisions.py      Fake-Jev tests (no network) + a few real Jev calls
 │   ├── test_routing.py        Hand-made Decisions, no network at all
-│   └── test_api.py             FastAPI TestClient + fake classify() — no network
+│   ├── test_api.py             FastAPI TestClient + fake classify() — no network
+│   └── test_llm.py             Fake call_llm() — no network, proves human_review = 0 LLM calls
 ├── hello_jev.py                Part 1: first working call to Jev (1 question: intent)
 ├── decision_engine.py           Part 2 script: 4 questions per message in a single call
 ├── run_pipeline.py               Runs 25 sentences through classify() + route(), prints the table
@@ -149,7 +152,7 @@ OPENROUTER_API_KEY=your_key_here
 venv\Scripts\python.exe hello_jev.py        # Part 1: intent only
 venv\Scripts\python.exe decision_engine.py  # Part 2 script: intent + complexity + risk + needs_tool
 venv\Scripts\python.exe run_pipeline.py     # engine + router together, on all 25 sentences
-venv\Scripts\python.exe -m pytest tests/ -v # 28 tests (fake ones need no API key)
+venv\Scripts\python.exe -m pytest tests/ -v # 35 tests (fake ones need no API key)
 venv\Scripts\python.exe -m uvicorn app.main:app --port 8000  # web service; open http://localhost:8000/docs
 ```
 
@@ -234,9 +237,26 @@ Verified live: `Delete all users` → real Jev call → `human_review`
 ever reaches Jev, both through the actual running server, not just tests.
 → [app/main.py](app/main.py), [app/api/routes.py](app/api/routes.py)
 
+**Part 3, Step 2** hires the 2 doctors: `small_llm` now calls
+`openai/gpt-5.6-luna` (cheap, fast), `strong_llm` calls
+`openai/gpt-5.6-terra` (~10x the price, smarter). `agent` and
+`human_review` never touch an LLM at all — `human_review` in particular
+is a hard safety requirement (a risky request must never get quietly
+answered anyway), proven by a dedicated test that asserts zero calls
+happen. If the cheap model fails, it's retried once on the strong model;
+if the strong model fails, you get a clean `error` field, never a crash.
+Same-question cost comparison, run for real: terra cost **~14x more**
+than luna and took 1.6x longer for a question neither model needed deep
+reasoning for — the exact case for routing most traffic to the cheap
+model. Full numbers, live 3-scenario check, and an honestly-reported
+miss (the "explain the financial report risks" example routed to
+`small_llm`, not `strong_llm`, because Jev scored it "moderate" not
+"complex"): [results/part3_llm.md](results/part3_llm.md)
+
 ## Progress
 
-See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–2 are done.
-Part 3 Step 1 (FastAPI web service) is done — 28 tests total, no API
-key needed for most of them. Step 2 (wiring the 4 destinations up to
-real LLMs) is next.
+See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–3 are done —
+Jev decides, the router picks a destination, and 2 real LLMs (plus a
+safe no-op for `agent`/`human_review`) actually answer. 35 tests total,
+no API key needed for most of them. Part 4 (LangGraph agent + tools) is
+next.

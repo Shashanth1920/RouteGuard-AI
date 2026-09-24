@@ -9,6 +9,17 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 JEV_MODEL = os.getenv("JEV_MODEL", "typesafe/jev-1.13")  # pinned, not ~typesafe/jev-latest
 JEV_TIMEOUT = float(os.getenv("JEV_TIMEOUT", "10"))
 
+# Part 3 Step 2 - the 2 doctors. Both pinned (not ~openai/gpt-...-latest),
+# same reasoning as JEV_MODEL above. Confirmed live on OpenRouter's model
+# list: gpt-5.6-terra prices ~10x gpt-5.6-luna (0.000002/0.000012 per
+# prompt/completion token vs. 0.0000002/0.0000012), matching "cheap
+# junior doctor" vs. "expensive specialist".
+SMALL_LLM_MODEL = os.getenv("SMALL_LLM_MODEL", "openai/gpt-5.6-luna")
+STRONG_LLM_MODEL = os.getenv("STRONG_LLM_MODEL", "openai/gpt-5.6-terra")
+LLM_SYSTEM_PROMPT = "Answer clearly and briefly."
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "400"))
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "20"))
+
 # Router cutoffs. Chosen from real Decision data on our 25 test sentences
 # (see results/part2_router.md), not guessed.
 
