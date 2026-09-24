@@ -1,0 +1,8 @@
+- [ ] Part 1: Setup + Jev hello-world
+- [ ] Part 2: Decision Engine + Router
+- [ ] Part 3: FastAPI + LLMs
+- [ ] Part 4: LangGraph agent + tools
+- [ ] Part 5: Safety Gate
+- [ ] Part 6: PostgreSQL logging
+- [ ] Part 7: Evaluation
+- [ ] Part 8: Docker + README
