@@ -5,13 +5,18 @@ math, code, a web search, a database change, a real-world action, or just
 conversation — using [Jev](https://openrouter.ai/typesafe/jev-1.13), a
 decision model from TypeSafe AI (not a text-generating LLM like GPT).
 
+**Live on AWS:** http://routeguard-prod.eba-kwkepupu.ap-south-1.elasticbeanstalk.com/docs
+— Elastic Beanstalk (Docker) + RDS PostgreSQL + Secrets Manager, region `ap-south-1` (Mumbai).
+See [Deployed on AWS](#deployed-on-aws-elastic-beanstalk--rds).
+
 ## Highlights
 
+- **Deployed on AWS:** containerized FastAPI app on **Elastic Beanstalk**, logging to managed **RDS PostgreSQL** in a private security group, API keys + DB password pulled from **AWS Secrets Manager** at startup via the instance's **IAM** role — no secrets in env vars or the repo.
 - **Two-stage routing:** a decision model (Jev) scores each message for intent, complexity, risk and tool need in one ~0.4s call; 6 plain-Python rules (safety first, then cost) pick `human_review`, `small_llm`, `strong_llm`, or a tool-using `agent`.
 - **Safety Gate:** every tool call the LangGraph agent proposes is checked before it runs (destructive? matches the user's request?) → ALLOW / NEEDS_APPROVAL / BLOCK. 30/30 on hand-labeled gate cases.
 - **Measured, not claimed:** 250-message hand-labeled dataset (dev/test split, incl. polite, hidden, typo and Hinglish/Tanglish attacks). Held-out test, run once: **98% risky-request detection, 88.7% route accuracy, 0 unsafe actions executed**.
 - **Fails safe:** Jev down → human review; logging (PostgreSQL) fails open so an observability outage never blocks users.
-- **Stack:** Python, FastAPI, LangGraph, Pydantic, PostgreSQL, OpenRouter, Tavily, pytest (73 tests, most need no network).
+- **Stack:** Python, FastAPI, LangGraph, Pydantic, PostgreSQL, OpenRouter, Tavily, Docker, AWS (Elastic Beanstalk, RDS, Secrets Manager, IAM), pytest (73 tests, most need no network).
 
 ## Architecture
 
@@ -235,7 +240,61 @@ compose Postgres service - verify that one with
 ## Deployed on AWS (Elastic Beanstalk + RDS)
 
 Live: `http://routeguard-prod.eba-kwkepupu.ap-south-1.elasticbeanstalk.com`
-(demo deployment - may not stay up indefinitely).
+(demo deployment - may not stay up indefinitely). Try `GET /health`,
+the interactive API docs at `/docs`, or `POST /v1/route`.
+
+### AWS services used
+
+| Service | What it does here |
+|---|---|
+| **Elastic Beanstalk** (Docker platform) | Builds and runs this repo's `Dockerfile`; handles provisioning, health checks, deploys and rollbacks |
+| **EC2** (`t3.micro`, via EB) | The single instance the container runs on; `Dockerrun.aws.json` maps host port 80 → container port 8000 |
+| **RDS for PostgreSQL** (`db.t3.micro`, single-AZ) | Managed database for request logging (`/v1/requests`, `/v1/stats`) |
+| **Secrets Manager** | Stores `OPENROUTER_API_KEY`, `TAVILY_API_KEY`, `DB_PASSWORD`; fetched at startup by `app/config.py` |
+| **IAM** (EB instance profile) | Grants the instance permission to read those secrets — no AWS keys in the app |
+| **VPC security groups** | RDS accepts connections only from the app's security group; the database is not public |
+| **CloudWatch / EB logs** | Container logs used to diagnose the two deploy bugs below |
+| **S3** (via EB) | Stores uploaded application versions for each deploy |
+
+```
+   Internet
+      │  HTTP :80
+      ▼
+┌──────────────────────── AWS  ap-south-1 ────────────────────────┐
+│                                                                 │
+│  Elastic Beanstalk env "routeguard-prod"                        │
+│  ┌───────────────────────────────┐        ┌──────────────────┐  │
+│  │ EC2 t3.micro                  │ :5432  │ RDS PostgreSQL   │  │
+│  │  Docker: uvicorn app.main:app ├───────►│ db.t3.micro      │  │
+│  │  (port 80 → 8000)             │ SG-only│ (not public)     │  │
+│  └──────────────┬────────────────┘        └──────────────────┘  │
+│                 │ IAM instance role                             │
+│                 ▼                                               │
+│        Secrets Manager (API keys, DB password)                  │
+└─────────────────┼───────────────────────────────────────────────┘
+                  │ HTTPS
+                  ▼
+        OpenRouter (Jev + LLMs), Tavily (web search)
+```
+
+### Deploy it yourself
+
+```
+eb init -p docker routeguard-ai --region ap-south-1
+eb create routeguard-prod --instance-type t3.micro
+# create the RDS instance + Secrets Manager secrets, allow the EB instance
+# role secretsmanager:GetSecretValue on them, then:
+eb setenv DB_HOST=<rds-endpoint> DB_NAME=routeguard DB_USER=routeguard \
+  OPENROUTER_API_KEY_SECRET_ARN=arn:aws:secretsmanager:... \
+  TAVILY_API_KEY_SECRET_ARN=arn:aws:secretsmanager:... \
+  DB_PASSWORD_SECRET_ARN=arn:aws:secretsmanager:...
+eb deploy
+```
+
+Each secret is a JSON `SecretString` keyed by the variable name (e.g.
+`{"OPENROUTER_API_KEY": "..."}`), which is what `_secret()` reads.
+
+### Design notes and bugs caught
 
 - **Elastic Beanstalk** (Docker platform, single `t3.micro` instance) runs
   the exact `Dockerfile` in this repo - no separate deployment-specific
