@@ -42,6 +42,14 @@ def test_rule3_low_confidence_goes_to_strong_llm():
     assert result.rule == 3
 
 
+def test_low_confidence_but_clear_tool_need_goes_to_agent():
+    # "List all users in the database" - Jev: confidence 0.66, needs_tool 0.95
+    d = make_decision(intent="database action", intent_confidence=0.66, needs_tool=0.95)
+    result = route(d)
+    assert result.route == "agent"
+    assert result.rule == 5
+
+
 def test_rule4_complex_goes_to_strong_llm():
     d = make_decision(complexity_label="complex", complexity_score=1.9)
     result = route(d)

@@ -24,8 +24,11 @@ import sys
 import time
 from pathlib import Path
 
+import requests
+
 EVAL_DIR = Path(__file__).parent
 sys.path.insert(0, str(EVAL_DIR.parent))  # so `app.*` imports work regardless of cwd
+sys.path.insert(0, str(EVAL_DIR))  # so `llm_baseline` imports work regardless of cwd
 RAW_DIR = EVAL_DIR / "raw"
 RAW_DIR.mkdir(exist_ok=True)
 
@@ -51,11 +54,10 @@ def _settings_snapshot() -> dict:
     }
 
 
-def _decision_row(row: dict) -> dict:
-    from app.decision.jev_classifier import classify
+def _decision_row(row: dict, decider) -> dict:
     from app.routing.router import route
 
-    decision = classify(row["message"])
+    decision = decider(row["message"])
     result = route(decision)
     return {
         **{k: row[k] for k in ("id", "category", "subcategory", "message", "expected", "expected_route")},
@@ -74,19 +76,27 @@ def _decision_row(row: dict) -> dict:
         "got_rule": result.rule,
         "got_reason": result.reason,
         "jev_time": decision.time_taken,
+        "decision_input_tokens": decision.jev_input_tokens,
+        "decision_output_tokens": decision.jev_output_tokens,
+        "decision_cost": decision.jev_cost,
     }
 
 
-def run_decision(dataset: str, workers: int = 8):
+def run_decision(dataset: str, workers: int = 8, decider_name: str = "jev", out_name: str = None):
     from app.config import NEEDS_TOOL_CUTOFF, RISK_CUTOFF
     global _CUTOFFS
     _CUTOFFS = {"risk": RISK_CUTOFF, "needs_tool": NEEDS_TOOL_CUTOFF}
 
+    if decider_name == "jev":
+        from app.decision.jev_classifier import classify as decider
+    else:
+        from llm_baseline import classify as decider
+
     rows = _load(dataset)
-    print(f"Running decision mode on {dataset} ({len(rows)} rows, {workers} workers)...")
+    print(f"Running decision mode ({decider_name}) on {dataset} ({len(rows)} rows, {workers} workers)...")
     results = [None] * len(rows)
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(_decision_row, row): i for i, row in enumerate(rows)}
+        futures = {pool.submit(_decision_row, row, decider): i for i, row in enumerate(rows)}
         done = 0
         for future in concurrent.futures.as_completed(futures):
             i = futures[future]
@@ -95,8 +105,71 @@ def run_decision(dataset: str, workers: int = 8):
             if done % 25 == 0 or done == len(rows):
                 print(f"  {done}/{len(rows)}")
 
-    out = {"dataset": dataset, "mode": "decision", "settings": _settings_snapshot(), "rows": results}
-    out_path = RAW_DIR / f"decision_{dataset}.json"
+    out = {"dataset": dataset, "mode": "decision", "decider": decider_name,
+           "settings": _settings_snapshot(), "rows": results}
+    if out_name:
+        out_path = RAW_DIR / out_name
+    else:
+        suffix = "" if decider_name == "jev" else f"_{decider_name}"
+        out_path = RAW_DIR / f"decision_{dataset}{suffix}.json"
+    out_path.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"Saved {out_path}")
+
+
+def _call_llm_with_retry(model: str, message: str, retries: int = 8):
+    """150 sequential calls to the same model hit OpenRouter's rate limit
+    (confirmed live: an unthrottled run 429'd on 129/150 requests). A
+    slower follow-up run then hit 402 "can only afford N tokens" on every
+    request despite ~$99 of account balance remaining - this account's
+    burst-spend velocity, not its total balance, is what's constrained.
+    Both are retryable with backoff, not real model failures."""
+    from app.llm.client import call_llm
+
+    for attempt in range(retries):
+        try:
+            return call_llm(model, message)
+        except requests.exceptions.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            if status in (429, 402) and attempt < retries - 1:
+                wait = float(exc.response.headers.get("Retry-After", 5 * (attempt + 1)))
+                time.sleep(wait)
+                continue
+            raise
+
+
+def run_always_strong(dataset: str):
+    """Part 7 Step 3's cost baseline: no Jev, no router - every message goes
+    straight to STRONG_LLM_MODEL. Real API calls, real measured cost/time,
+    not an estimate multiplied out from one sample."""
+    from app.config import STRONG_LLM_MODEL
+
+    rows = _load(dataset)
+    print(f"Running always-strong on {dataset} ({len(rows)} rows)...")
+    results = []
+    for i, row in enumerate(rows, start=1):
+        time.sleep(0.5)  # spread requests out - a tight loop is what 429'd the first attempt
+        try:
+            answer = _call_llm_with_retry(STRONG_LLM_MODEL, row["message"])
+            results.append({
+                **{k: row[k] for k in ("id", "category", "subcategory", "message")},
+                "model_used": answer.model_used,
+                "input_tokens": answer.input_tokens,
+                "output_tokens": answer.output_tokens,
+                "cost": answer.cost,
+                "time_taken": answer.llm_time_taken,
+                "error": None,
+            })
+        except Exception as exc:  # noqa: BLE001 - record and move on, don't lose the run
+            results.append({
+                **{k: row[k] for k in ("id", "category", "subcategory", "message")},
+                "model_used": STRONG_LLM_MODEL, "input_tokens": None, "output_tokens": None,
+                "cost": None, "time_taken": None, "error": str(exc),
+            })
+        if i % 25 == 0 or i == len(rows):
+            print(f"  {i}/{len(rows)}")
+
+    out = {"dataset": dataset, "mode": "always_strong", "settings": _settings_snapshot(), "rows": results}
+    out_path = RAW_DIR / f"always_strong_{dataset}.json"
     out_path.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Saved {out_path}")
 
@@ -239,10 +312,15 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("decision")
-    p.add_argument("--dataset", choices=["dev", "test"], required=True)
+    p.add_argument("--dataset", choices=["dev", "test", "fresh_test"], required=True)
     p.add_argument("--workers", type=int, default=8)
+    p.add_argument("--decider", choices=["jev", "llm"], default="jev")
+    p.add_argument("--out", help="output filename under evaluation/raw/ (default: decision_<dataset>[_<decider>].json)")
 
     sub.add_parser("gate")
+
+    p = sub.add_parser("always_strong")
+    p.add_argument("--dataset", choices=["dev", "test", "fresh_test"], required=True)
 
     p = sub.add_parser("full")
     p.add_argument("--dataset", choices=["dev", "test"], required=True)
@@ -258,9 +336,11 @@ def main():
 
     args = parser.parse_args()
     if args.command == "decision":
-        run_decision(args.dataset, args.workers)
+        run_decision(args.dataset, args.workers, args.decider, args.out)
     elif args.command == "gate":
         run_gate()
+    elif args.command == "always_strong":
+        run_always_strong(args.dataset)
     elif args.command == "full":
         run_full(args.dataset, args.sample, args.ids, args.out)
     elif args.command == "consistency":

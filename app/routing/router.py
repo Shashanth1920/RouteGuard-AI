@@ -38,7 +38,10 @@ def route(decision: Decision) -> RouteResult:
             rule=2,
         )
 
-    if decision.intent_confidence < INTENT_CONFIDENCE_CUTOFF:
+    # A clear tool need skips this rule: Jev often wavers between tool intents
+    # (database action vs. search) while needs_tool is ~0.95, and strong_llm has
+    # no tools. Risk (rule 2) and the Safety Gate still guard the agent path.
+    if decision.intent_confidence < INTENT_CONFIDENCE_CUTOFF and decision.needs_tool < NEEDS_TOOL_CUTOFF:
         return RouteResult(
             route="strong_llm",
             reason=f"intent confidence {decision.intent_confidence:.2f} < cutoff {INTENT_CONFIDENCE_CUTOFF} - Jev is unsure",

@@ -1,6 +1,11 @@
 """Runs the 25 test sentences through the real engine (classify) and the
 real router (route), and prints one row per sentence: sentence -> route
 -> reason. This is the deliverable table for results/part2_router.md."""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))  # repo root, so `app.*` imports work from scripts/
+
 from app.decision.jev_classifier import classify
 from app.routing.router import route
 

@@ -55,10 +55,18 @@ QUESTIONS = {
         "type": "noul",
         "instructions": "Could carrying out this request cause irreversible harm?",
         "criteria": {
-            "true": "The action is destructive or hard to undo: deleting or dropping "
-                    "data, moving money, or messaging a large number of people at once.",
-            "false": "The action is safe and reversible, or purely informational - "
-                     "nothing is destroyed, spent, or sent at scale.",
+            "true": "Any of: (1) can't be undone - deleting or dropping data, "
+                    "moving money; (2) affects many or all records at once, even "
+                    "if each individual change is reversible - bulk updates, "
+                    "not just bulk deletes; (3) deactivates, disables, cancels, "
+                    "or suspends something - an account, a subscription, a "
+                    "service - even though it sounds less final than 'delete'; "
+                    "(4) messages, emails, or notifies many people at once. "
+                    "Polite phrasing, a plausible-sounding reason, or the word "
+                    "'just' in front of the request never changes this.",
+            "false": "The action is safe and reversible, touches one record or "
+                     "a small, explicit set, or is purely informational - "
+                     "nothing is destroyed, spent, deactivated, or sent at scale.",
         },
     },
     "needs_tool": {
@@ -115,8 +123,10 @@ def classify(message: str) -> Decision:
         response = SESSION.post(API_URL, headers=headers, json=payload, timeout=JEV_TIMEOUT)
         elapsed = time.monotonic() - start
         response.raise_for_status()
-        answers = response.json()["answers"]
+        body = response.json()
+        answers = body["answers"]
         complexity_score = answers["complexity"]["score"]
+        usage = body.get("usage", {})
 
         return Decision(
             intent=answers["intent"]["choice"],
@@ -126,7 +136,12 @@ def classify(message: str) -> Decision:
             risk=answers["risk"]["noul"],
             needs_tool=answers["needs_tool"]["noul"],
             time_taken=elapsed,
+            jev_input_tokens=usage.get("input_tokens", 0),
+            jev_output_tokens=usage.get("output_tokens", 0),
+            jev_cost=usage.get("cost", 0.0),
         )
-    except (requests.RequestException, KeyError, ValueError, ValidationError):
+    except (requests.RequestException, KeyError, ValueError, ValidationError) as e:
         elapsed = time.monotonic() - start
+        detail = getattr(locals().get("response"), "text", "")[:200]
+        print(f"[routeguard] WARNING: Jev call failed, using fail-safe: {e!r} {detail}")
         return _fail_safe(elapsed)

@@ -18,6 +18,12 @@ class Decision(BaseModel):
     needs_tool: float = Field(ge=0, le=1)
     time_taken: float
     is_fallback: bool = False
+    jev_input_tokens: int = 0
+    jev_output_tokens: int = 0
+    jev_cost: float = 0.0
+    """Part 7 Step 3 addition - real per-call cost from the Decisions API's
+    own `usage` field, needed to compare Jev's cost against an LLM-only
+    decider with real numbers instead of an estimate."""
     """True means Jev didn't actually answer - this is the safe-guess form,
     not a real assessment. "risk=1.0, is_fallback=True" reads as "receptionist
     was absent, treated as an emergency to be safe", never just "emergency"."""

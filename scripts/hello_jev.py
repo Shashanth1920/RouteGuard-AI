@@ -10,9 +10,12 @@ saves one full raw API response to experiments/sample_raw_response.json.
 import json
 import os
 import time
+from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
+
+EXPERIMENTS_DIR = Path(__file__).parent / "experiments"  # this script's own folder, not the caller's cwd
 
 load_dotenv()
 
@@ -91,7 +94,7 @@ def classify(sentence: str) -> tuple[dict, float, dict]:
 
 
 def main():
-    os.makedirs("experiments", exist_ok=True)
+    os.makedirs(EXPERIMENTS_DIR, exist_ok=True)
     saved_raw = False
     print(f"Model: {MODEL}\n")
 
@@ -103,12 +106,12 @@ def main():
         print(f"    intent={intent}  confidence={confidence}  time={elapsed:.2f}s")
 
         if not saved_raw:
-            out_path = os.path.join("experiments", "sample_raw_response.json")
+            out_path = EXPERIMENTS_DIR / "sample_raw_response.json"
             with open(out_path, "w", encoding="utf-8") as f:
                 json.dump(raw, f, indent=2)
             saved_raw = True
 
-    print(f"\nSaved one full raw response to experiments/sample_raw_response.json")
+    print(f"\nSaved one full raw response to {EXPERIMENTS_DIR / 'sample_raw_response.json'}")
 
 
 if __name__ == "__main__":

@@ -5,6 +5,14 @@ math, code, a web search, a database change, a real-world action, or just
 conversation — using [Jev](https://openrouter.ai/typesafe/jev-1.13), a
 decision model from TypeSafe AI (not a text-generating LLM like GPT).
 
+## Highlights
+
+- **Two-stage routing:** a decision model (Jev) scores each message for intent, complexity, risk and tool need in one ~0.4s call; 6 plain-Python rules (safety first, then cost) pick `human_review`, `small_llm`, `strong_llm`, or a tool-using `agent`.
+- **Safety Gate:** every tool call the LangGraph agent proposes is checked before it runs (destructive? matches the user's request?) → ALLOW / NEEDS_APPROVAL / BLOCK. 30/30 on hand-labeled gate cases.
+- **Measured, not claimed:** 250-message hand-labeled dataset (dev/test split, incl. polite, hidden, typo and Hinglish/Tanglish attacks). Held-out test, run once: **98% risky-request detection, 88.7% route accuracy, 0 unsafe actions executed**.
+- **Fails safe:** Jev down → human review; logging (PostgreSQL) fails open so an observability outage never blocks users.
+- **Stack:** Python, FastAPI, LangGraph, Pydantic, PostgreSQL, OpenRouter, Tavily, pytest (73 tests, most need no network).
+
 ## Architecture
 
 The pipeline has two stages, deliberately kept separate: an AI stage that
@@ -81,7 +89,7 @@ only reports facts, and a plain-code stage that makes the actual decision.
  2. risk ≥ RISK_CUTOFF (0.5)?    ──yes──▶ human_review   "too risky to hand to any model"
     │ no
     ▼
- 3. intent_confidence < 0.7?     ──yes──▶ strong_llm     "Jev itself is unsure — use the smarter model"
+ 3. confidence < 0.7 and no tool? ──yes──▶ strong_llm    "Jev itself is unsure — use the smarter model"
     │ no
     ▼
  4. complexity == "complex"?     ──yes──▶ strong_llm     "hard request — needs real reasoning"
@@ -135,9 +143,11 @@ routeguard-ai/
 │   ├── test_agent.py           Scripted fake LLM + fake gate — no network, proves loop/stop/block behavior
 │   ├── test_gate.py            Fake Jev — no network, proves ALLOW/NEEDS_APPROVAL/BLOCK rules
 │   └── test_db.py              Real Postgres, dedicated routeguard_test DB — skips if unreachable
-├── hello_jev.py                Part 1: first working call to Jev (1 question: intent)
-├── decision_engine.py           Part 2 script: 4 questions per message in a single call
-├── run_pipeline.py               Runs 25 sentences through classify() + route(), prints the table
+├── scripts/                     Historical/exploratory scripts, not part of the deployed service
+│   ├── hello_jev.py              Part 1: first working call to Jev (1 question: intent)
+│   ├── decision_engine.py        Part 2 script: 4 questions per message in a single call
+│   ├── run_pipeline.py           Runs 25 sentences through classify() + route(), prints the table
+│   └── experiments/              Raw JSON responses saved from those runs (proof of work)
 ├── results/
 │   ├── part1.md                 Part 1 input/output + write-up
 │   ├── part2.md                 Part 2 input/output + write-up, incl. fix history
@@ -155,8 +165,13 @@ routeguard-ai/
 │   ├── gate_cases.json            30 rows — expected ALLOW/NEEDS_APPROVAL/BLOCK per case
 │   ├── run_eval.py                Runs dev/test in decision or full mode; saves raw results, never re-scores live
 │   ├── build_report.py            Reads evaluation/raw/*.json, writes results/part7_eval.md — no API calls
+│   ├── llm_baseline.py            Part 7 Step 3's 2nd decider: Luna, same questions, same router
+│   ├── build_comparison.py        Reads raw/*.json, writes results/part7_comparison.md — no API calls
 │   └── raw/                       Saved raw Jev/LLM answers per experiment — recompute metrics without paying again
-├── experiments/                 Raw JSON responses saved from real runs (proof of work)
+├── Dockerfile                    Builds the FastAPI app image
+├── docker-compose.yml            App + PostgreSQL, wired together for `docker compose up`
+├── requirements.txt              Pinned, from `pip freeze` in the working dev environment
+├── .env.example                  Documents every env var the app reads — no real secrets
 ├── TASKS.md                     8-part build checklist, checked off as we go
 ├── .env                         API keys + DB credentials (not committed — see .gitignore)
 └── venv/                        Python virtual environment (not committed)
@@ -167,28 +182,53 @@ routeguard-ai/
 ```
 python -m venv venv
 venv\Scripts\activate
-pip install requests python-dotenv pydantic pytest fastapi uvicorn httpx langgraph psycopg2-binary
+pip install -r requirements.txt
 ```
 
-Part 6 needs a running PostgreSQL (this project uses a native local
-install; Docker works the same way). Create a dedicated role + 2
-databases (main + test), then put its credentials in `.env` as
+Copy `.env.example` to `.env` and fill in real values:
+```
+copy .env.example .env
+```
+
+Part 6 needs a running PostgreSQL (this project's own dev environment
+uses a native local install since Docker wasn't available on that
+machine — see `results/part6_logging.md`; `docker-compose.yml` below
+gives you a real Postgres container instead, no native install needed).
+If running without Docker, create a dedicated role + 2 databases (main +
+test) yourself, then put its credentials in `.env` as
 `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_TEST_NAME`/`DB_USER`/`DB_PASSWORD`.
-
-Put your key in `.env`:
-```
-OPENROUTER_API_KEY=your_key_here
-```
 
 ## Run it
 
 ```
-venv\Scripts\python.exe hello_jev.py        # Part 1: intent only
-venv\Scripts\python.exe decision_engine.py  # Part 2 script: intent + complexity + risk + needs_tool
-venv\Scripts\python.exe run_pipeline.py     # engine + router together, on all 25 sentences
 venv\Scripts\python.exe -m pytest tests/ -v # 73 tests (fake ones need no API key or database)
 venv\Scripts\python.exe -m uvicorn app.main:app --port 8000  # web service; open http://localhost:8000/docs
 ```
+
+The historical Part 1/2 scripts still work the same way, from the repo root:
+```
+venv\Scripts\python.exe scripts\hello_jev.py        # Part 1: intent only
+venv\Scripts\python.exe scripts\decision_engine.py  # Part 2 script: intent + complexity + risk + needs_tool
+venv\Scripts\python.exe scripts\run_pipeline.py     # engine + router together, on all 25 sentences
+```
+
+## Run it with Docker
+
+```
+docker compose up --build
+```
+
+This builds the app image (`Dockerfile`) and starts it alongside a real
+PostgreSQL container (`docker-compose.yml`), wired together with no
+native Postgres install needed. Put real API keys in `.env` first (compose
+reads it automatically); everything else has a sane default. The app is
+then at `http://localhost:8000`, same as running it locally.
+
+**Not build-verified on this machine** — Docker isn't installed here (the
+same constraint noted in Part 6), so `Dockerfile`/`docker-compose.yml`
+were written and carefully reviewed, not run end-to-end. Said plainly
+rather than claiming a test that didn't happen; verify with
+`docker compose up --build` before relying on it in a real deployment.
 
 ## What's been done — in plain terms
 
@@ -437,8 +477,10 @@ subscription", and a Tamil-English "email all customers" request all
 scored below the risk cutoff at the router. Checked what would have
 actually happened for all 3, live, through the real pipeline: in every
 case the model itself declined or asked for confirmation, and
-**0 unsafe actions were actually executed** - the Safety Gate's defense
-in depth caught what the router-level risk score missed. Gate-case
+**0 unsafe actions were actually executed** - but not thanks to the
+Safety Gate: the gate never ran (no tool was proposed), the LLM itself
+declined. The router's risk wording was then fixed and re-validated on a
+fresh 52-row set (see the report's section 2b for the honest tradeoff). Gate-case
 accuracy: 30/30. Consistency check: 18/20 identical across 2 runs (2
 small near-cutoff score differences, expected from a live model).
 Building the report script itself caught a real bug: 2 dataset categories
@@ -455,6 +497,14 @@ Jev decides, the router picks a destination, 2 LLMs answer directly, a
 LangGraph agent uses real tools behind a real Jev-backed Safety Gate,
 every request and tool call is logged to PostgreSQL (fail-open, no
 secrets, truncated outputs), and the whole system has now been measured
-against a 250-message labeled dataset with a real report card. 73 code
-tests total, no API key needed for most of them. Part 8 (Docker + README
-polish) is next.
+against a 250-message labeled dataset with a real report card. 74 code
+tests total, no API key needed for most of them.
+
+Part 8 (Docker + README polish) is in progress: `Dockerfile` and
+`docker-compose.yml` are written (app + PostgreSQL, wired together),
+`requirements.txt` is pinned from the real working environment,
+`.env.example` documents every setting, and the historical Part 1/2
+scripts moved into `scripts/` to keep the root clean. Not yet checked
+off in `TASKS.md` - Docker isn't installed on this machine, so the
+compose file hasn't been build-verified end-to-end, and that's said
+plainly rather than claimed.
