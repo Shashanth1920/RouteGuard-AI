@@ -224,11 +224,44 @@ native Postgres install needed. Put real API keys in `.env` first (compose
 reads it automatically); everything else has a sane default. The app is
 then at `http://localhost:8000`, same as running it locally.
 
-**Not build-verified on this machine** — Docker isn't installed here (the
-same constraint noted in Part 6), so `Dockerfile`/`docker-compose.yml`
-were written and carefully reviewed, not run end-to-end. Said plainly
-rather than claiming a test that didn't happen; verify with
-`docker compose up --build` before relying on it in a real deployment.
+**Update: the `Dockerfile` itself is now build-verified** — not on this
+machine (Docker still isn't installed here), but for real, by AWS
+Elastic Beanstalk actually building and running it in production (see
+below). `docker-compose.yml`'s local-Postgres pairing specifically is
+still unverified, since the AWS deployment uses RDS instead of the
+compose Postgres service - verify that one with
+`docker compose up --build` before relying on it.
+
+## Deployed on AWS (Elastic Beanstalk + RDS)
+
+Live: `http://routeguard-prod.eba-kwkepupu.ap-south-1.elasticbeanstalk.com`
+(demo deployment - may not stay up indefinitely).
+
+- **Elastic Beanstalk** (Docker platform, single `t3.micro` instance) runs
+  the exact `Dockerfile` in this repo - no separate deployment-specific
+  build step.
+- **RDS PostgreSQL** (`db.t3.micro`, single-AZ) is a separate managed
+  database, reachable only from the app's own security group (not
+  public), matching this project's own DB layer unchanged.
+- **Secrets** (`OPENROUTER_API_KEY`, `TAVILY_API_KEY`, `DB_PASSWORD`)
+  are **not** plain EB environment variables - they live in AWS Secrets
+  Manager, and `app/config.py`'s `_secret()` helper fetches them at
+  startup via a `<VAR>_SECRET_ARN` environment variable instead of the
+  plain var. Locally/in Docker Compose, the plain env vars still work
+  exactly as before - this is additive, not a breaking change.
+- A real bug caught deploying this: the first deploy attempt crashed
+  with `botocore.exceptions.NoRegionError` - `boto3.client("secretsmanager")`
+  has no ambient region inside a container the way it might on a bare
+  EC2 host. Fixed by parsing the region directly out of the secret's own
+  ARN (`arn:aws:secretsmanager:<region>:...`) instead of depending on
+  environment-based region resolution.
+- A second real bug: after that crash, Elastic Beanstalk auto-rolled
+  back the failed deploy's configuration changes along with its code,
+  silently removing the 3 `*_SECRET_ARN` settings. The next deploy
+  (code-only) came up with empty secrets - visible immediately as a
+  Postgres `no password supplied` error and an OpenRouter
+  `Missing Authentication header` 401 in the container logs, not a
+  silent failure.
 
 ## What's been done — in plain terms
 

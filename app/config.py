@@ -5,7 +5,28 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+
+def _secret(env_var: str) -> str:
+    """Local/dev: plain env var (from .env). AWS: if <ENV_VAR>_SECRET_ARN is
+    set instead, fetch the real value from Secrets Manager at startup - so
+    real keys/passwords never sit in plaintext EB environment properties."""
+    value = os.getenv(env_var)
+    if value:
+        return value
+    arn = os.getenv(f"{env_var}_SECRET_ARN")
+    if not arn:
+        return ""
+    import json
+
+    import boto3
+
+    region = arn.split(":")[3]  # arn:aws:secretsmanager:<region>:... - avoids needing a separate region env var
+    client = boto3.client("secretsmanager", region_name=region)
+    secret = json.loads(client.get_secret_value(SecretId=arn)["SecretString"])
+    return secret[env_var]
+
+
+OPENROUTER_API_KEY = _secret("OPENROUTER_API_KEY")
 JEV_MODEL = os.getenv("JEV_MODEL", "typesafe/jev-1.13")  # pinned, not ~typesafe/jev-latest
 JEV_TIMEOUT = float(os.getenv("JEV_TIMEOUT", "10"))
 
@@ -21,7 +42,7 @@ LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "400"))
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "20"))
 
 # Part 4 Step 1 - tools
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+TAVILY_API_KEY = _secret("TAVILY_API_KEY")
 SEARCH_TIMEOUT = float(os.getenv("SEARCH_TIMEOUT", "10"))
 
 # Part 4 Step 2 - agent. Without a cap a confused agent can call tools
@@ -95,7 +116,7 @@ DB_PORT = int(os.getenv("DB_PORT", "5432"))
 DB_NAME = os.getenv("DB_NAME", "routeguard")
 DB_TEST_NAME = os.getenv("DB_TEST_NAME", "routeguard_test")
 DB_USER = os.getenv("DB_USER", "routeguard")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_PASSWORD = _secret("DB_PASSWORD")
 
 # Never store a full tool output - a runaway search result or a large
 # product list could otherwise bloat every row. 1000 chars is enough to
