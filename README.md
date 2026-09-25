@@ -8,6 +8,8 @@ decision model from TypeSafe AI (not a text-generating LLM like GPT).
 **Live on AWS:** http://routeguard-prod.eba-kwkepupu.ap-south-1.elasticbeanstalk.com/docs
 — Elastic Beanstalk (Docker) + RDS PostgreSQL + Secrets Manager, region `ap-south-1` (Mumbai).
 See [Deployed on AWS](#deployed-on-aws-elastic-beanstalk--rds).
+The public demo runs with AI calls switched off (no OpenRouter key), so every
+message falls back to `human_review` at zero cost.
 
 ## Highlights
 
@@ -242,6 +244,17 @@ compose Postgres service - verify that one with
 Live: `http://routeguard-prod.eba-kwkepupu.ap-south-1.elasticbeanstalk.com`
 (demo deployment - may not stay up indefinitely). Try `GET /health`,
 the interactive API docs at `/docs`, or `POST /v1/route`.
+
+**Public demo mode (cost control):** since the site is public with no auth
+or rate limit, the `OPENROUTER_API_KEY_SECRET_ARN` setting was removed from
+the Elastic Beanstalk environment. Without a key, every Jev call fails and
+the router's fail-safe sends the message to `human_review` - so the demo
+makes **no** paid OpenRouter/OpenAI calls (and never reaches Tavily, which
+only the agent route uses). The API, routing rules, safety fallback and
+RDS logging all still run. To turn AI back on, re-add that setting with
+the secret's ARN. An AWS Budget (`routeguard-ai-10usd`, $10/month on this
+project's services in `ap-south-1`) emails alerts at 50% and 80% of actual
+spend and at 100% forecast.
 
 ### AWS services used
 
