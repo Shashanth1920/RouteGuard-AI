@@ -4,5 +4,5 @@
 - [x] Part 4: LangGraph agent + tools
 - [x] Part 5: Safety Gate
 - [x] Part 6: PostgreSQL logging
-- [ ] Part 7: Evaluation
+- [ ] Part 7: Evaluation (Step 1: dataset built, pending your review; Step 2: run + report next)
 - [ ] Part 8: Docker + README

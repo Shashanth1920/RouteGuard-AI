@@ -145,6 +145,13 @@ routeguard-ai/
 │   ├── part4_agent.md           Agent: live tool-use examples, tests
 │   ├── part5_gate.md            Safety Gate: live examples, injection demo, tests
 │   └── part6_logging.md         Logging: fail-open proof, 10-request verification, a real bug caught
+├── evaluation/
+│   ├── label_guide.md            Definitions for every label + why (dev/test split, tricky cases)
+│   ├── build_dataset.py           Generates dev.json + test.json (250 hand-labeled rows) - reviewable, rerunnable
+│   ├── build_gate_cases.py        Generates gate_cases.json (30 hand-labeled proposed tool calls)
+│   ├── dev.json                   100 rows — for tuning, not final scoring
+│   ├── test.json                  150 rows — untouched until the final Part 7 run
+│   └── gate_cases.json            30 rows — expected ALLOW/NEEDS_APPROVAL/BLOCK per case
 ├── experiments/                 Raw JSON responses saved from real runs (proof of work)
 ├── TASKS.md                     8-part build checklist, checked off as we go
 ├── .env                         API keys + DB credentials (not committed — see .gitignore)
@@ -387,6 +394,29 @@ which matched exactly. `GET /v1/requests/{id}` (also a "nice extra")
 returns one full record, request + its tool calls, step-ordered.
 → [results/part6_logging.md](results/part6_logging.md)
 
+**Part 7, Step 1** builds the test dataset - this is a hospital inspection
+bringing 200+ fake patients with known correct answers, to check whether
+the real thing routes them correctly. 250 messages across 8 categories
+(calculation, search, database read/write, risky/destructive, general
+chat, coding, and 45 deliberately **tricky** cases: scary-sounding but
+safe, polite-but-dangerous, hidden danger, mixed requests, typos,
+Hinglish/Tanglish code-mixing, and very long/short messages), plus 30
+separate proposed-tool-call cases with expected Safety Gate verdicts.
+
+Every label was written from `evaluation/label_guide.md`'s own
+definitions - never by running Jev and copying its answers, since that
+would just be grading Jev against itself. Split 100 dev (for tuning) /
+150 test (untouched until the final run), stratified per category, with
+zero duplicates and zero overlap with the original 25 sentences from
+Part 2 (checked programmatically, not just by eye).
+
+**This is a draft, not yet finished per the spec's own instruction**:
+Claude drafted every label; a human still needs to personally skim all
+250+30 rows and check at least 50 carefully before this is real ground
+truth. One row (`tric-044`, the bare word "delete") is flagged in its own
+notes as a genuine judgment call worth a second look.
+→ [evaluation/label_guide.md](evaluation/label_guide.md)
+
 ## Progress
 
 See [TASKS.md](TASKS.md) for the full 8-part plan. Parts 1–6 are done —
@@ -394,4 +424,5 @@ Jev decides, the router picks a destination, 2 LLMs answer directly, a
 LangGraph agent uses real tools behind a real Jev-backed Safety Gate, and
 every request and tool call is now logged to PostgreSQL (fail-open, no
 secrets, truncated outputs). 73 tests total, no API key needed for most
-of them. Part 7 (Evaluation) is next.
+of them. Part 7 Step 1 (the labeled evaluation dataset) is drafted and
+needs your review before Step 2 (running the real evaluation) can start.
