@@ -1,0 +1,308 @@
+{
+  "mode": "consistency",
+  "n": 20,
+  "run1": [
+    {
+      "message": "What's 18% tip on ₹2,450?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What is 962 times 17?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What is 15% of 320?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Split a ₹1,200 bill three ways with a 10% tip added",
+      "intent": "calculation",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What is 45 times 67?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Calculate the area of a circle with radius 7cm",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Convert 3.5 kg to pounds",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What's 7 factorial?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What's 33% of 900?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "How many seconds are there in 3.5 hours?",
+      "intent": "calculation",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Convert 2 acres to square feet",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What's 60% of 60% of 500?",
+      "intent": "calculation",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Latest iPhone price in India",
+      "intent": "search",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Who is the current Prime Minister of the UK?",
+      "intent": "search",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": false
+    },
+    {
+      "message": "Current price of gold per gram in India",
+      "intent": "search",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What's trending on Twitter today?",
+      "intent": "search",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Latest updates on the new tax policy",
+      "intent": "search",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Find me flight prices from Delhi to Mumbai next week",
+      "intent": "search",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What's the release date for the next iOS update?",
+      "intent": "search",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Find recent research papers on quantum computing",
+      "intent": "search",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    }
+  ],
+  "run2": [
+    {
+      "message": "What's 18% tip on ₹2,450?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What is 962 times 17?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What is 15% of 320?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Split a ₹1,200 bill three ways with a 10% tip added",
+      "intent": "calculation",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What is 45 times 67?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Calculate the area of a circle with radius 7cm",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Convert 3.5 kg to pounds",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What's 7 factorial?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": false
+    },
+    {
+      "message": "What's 33% of 900?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "How many seconds are there in 3.5 hours?",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Convert 2 acres to square feet",
+      "intent": "calculation",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What's 60% of 60% of 500?",
+      "intent": "calculation",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Latest iPhone price in India",
+      "intent": "search",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Who is the current Prime Minister of the UK?",
+      "intent": "search",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": false
+    },
+    {
+      "message": "Current price of gold per gram in India",
+      "intent": "search",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What's trending on Twitter today?",
+      "intent": "search",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Latest updates on the new tax policy",
+      "intent": "search",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Find me flight prices from Delhi to Mumbai next week",
+      "intent": "search",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "What's the release date for the next iOS update?",
+      "intent": "search",
+      "complexity_label": "simple",
+      "risky": false,
+      "needs_tool": true
+    },
+    {
+      "message": "Find recent research papers on quantum computing",
+      "intent": "search",
+      "complexity_label": "moderate",
+      "risky": false,
+      "needs_tool": true
+    }
+  ],
+  "diffs": [
+    {
+      "message": "What's 7 factorial?",
+      "changed": {
+        "needs_tool": [
+          true,
+          false
+        ]
+      }
+    },
+    {
+      "message": "How many seconds are there in 3.5 hours?",
+      "changed": {
+        "complexity_label": [
+          "moderate",
+          "simple"
+        ]
+      }
+    }
+  ]
+}
