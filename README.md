@@ -9,7 +9,8 @@ decision model from TypeSafe AI (not a text-generating LLM like GPT).
 — Elastic Beanstalk (Docker) + RDS PostgreSQL + Secrets Manager, region `ap-south-1` (Mumbai).
 See [Deployed on AWS](#deployed-on-aws-elastic-beanstalk--rds).
 The public demo runs with AI calls switched off (no OpenRouter key), so every
-message falls back to `human_review` at zero cost.
+message falls back to `human_review` at zero cost. AWS spend is tracked by a
+**$10/month AWS Budget** with email alerts.
 
 ## Highlights
 
@@ -267,6 +268,7 @@ spend and at 100% forecast.
 | **IAM** (EB instance profile) | Grants the instance permission to read those secrets — no AWS keys in the app |
 | **VPC security groups** | RDS accepts connections only from the app's security group; the database is not public |
 | **CloudWatch / EB logs** | Container logs used to diagnose the two deploy bugs below |
+| **AWS Budgets** | `routeguard-ai-10usd`: **$10/month** limit on this project's services, email alerts at 50%, 80% and 100% forecast |
 | **S3** (via EB) | Stores uploaded application versions for each deploy |
 
 ```
